@@ -12,6 +12,7 @@
   let invites = [];
   let inviteOnly = false;
   let approvalRequired = false;
+  let outdated = false;
 
   const navList = document.querySelector(".sidebar nav");
   const navButton = document.createElement("button");
@@ -72,6 +73,10 @@
       Boolean((setting.data || []).find((r) => r.key === key)?.value?.enabled);
     inviteOnly = enabled("invite_only");
     approvalRequired = enabled("approval_required");
+    // An older database script returns accounts without the approval column.
+    outdated =
+      TraceSync.schemaOutdated ||
+      (people.length > 0 && !("approval_pending" in people[0]));
     showWaiting(people.filter((p) => p.approval_pending).length);
   }
 
@@ -114,7 +119,12 @@
       }
       <section class="panel">
         <div class="section-head"><h2>Sign-up</h2><span>${mode}</span></div>
-        <label class="trace-acct-switch"><input type="checkbox" id="acctApproval" ${approvalRequired ? "checked" : ""}>
+        ${
+          outdated
+            ? `<p class="notice trace-schema-warning"><strong>Admin approval needs a database update.</strong> In Supabase, open <strong>SQL Editor</strong>, paste the latest <code>supabase/schema.sql</code>, and click <strong>Run</strong>, then reload TRACE.${approvalRequired ? " The switch below is on but <strong>not enforced</strong> yet: new sign-ups get in straight away." : ""}</p>`
+            : ""
+        }
+        <label class="trace-acct-switch"><input type="checkbox" id="acctApproval" ${approvalRequired ? "checked" : ""} ${outdated ? "disabled" : ""}>
           <span><strong>Require admin approval for new accounts</strong><small>Anyone with the link can create an account, but it can't see or save anything until an admin approves it here. Invited emails don't need approval.</small></span></label>
         <label class="trace-acct-switch"><input type="checkbox" id="acctInviteOnly" ${inviteOnly ? "checked" : ""}>
           <span><strong>Invite-only sign-up</strong><small>Only emails on the invite list below can create an account; everyone else is turned away. People who already have accounts are not affected.</small></span></label>

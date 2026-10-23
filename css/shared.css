@@ -276,6 +276,12 @@
 .trace-acct-waiting {
   border-color: #806e44;
 }
+.trace-schema-warning {
+  border-left-color: #b6575b;
+}
+.trace-schema-warning code {
+  font-size: 12px;
+}
 .trace-nav-badge {
   margin-left: auto;
   min-width: 20px;

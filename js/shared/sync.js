@@ -66,6 +66,7 @@ const TraceSync = (function () {
     isAdmin: false,
     active: true,
     // The Supabase client, for admin features that talk to the database directly.
+    schemaOutdated: false,
     db: () => client,
     toast: (message) => toast(message),
     start,
@@ -770,14 +771,26 @@ const TraceSync = (function () {
     api.userId = user.id;
     const cached = load(PROFILE_KEY, null);
     let profile = cached?.id === user.id ? cached : null;
-    const { data, error } = await client
-      .from("profiles")
-      .select("display_name,role,active,approval_pending")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (!error && data) {
-      profile = { id: user.id, ...data };
-      store(PROFILE_KEY, profile);
+    // Newer TRACE versions read columns an older database lacks. Fall back to the columns that
+    // exist so admins stay admins, and flag that supabase/schema.sql needs to be run again.
+    const columnSets = [
+      "display_name,role,active,approval_pending",
+      "display_name,role,active",
+      "display_name,role",
+    ];
+    for (const [i, columns] of columnSets.entries()) {
+      const { data, error } = await client
+        .from("profiles")
+        .select(columns)
+        .eq("id", user.id)
+        .maybeSingle();
+      if (error && !isConnectionError(error)) continue;
+      if (!error && data) {
+        profile = { id: user.id, ...data };
+        store(PROFILE_KEY, profile);
+        api.schemaOutdated = i > 0;
+      }
+      break;
     }
     api.displayName =
       profile?.display_name ||
@@ -863,6 +876,14 @@ const TraceSync = (function () {
       api.isAdmin ? "trace-admin" : "trace-oct",
     );
 
+    if (api.isAdmin && api.schemaOutdated) {
+      const warning = document.createElement("div");
+      warning.className = "notice trace-schema-warning";
+      warning.setAttribute("role", "alert");
+      warning.innerHTML =
+        "<strong>TRACE's database needs an update.</strong> In Supabase, open <strong>SQL Editor</strong>, paste the latest <code>supabase/schema.sql</code> from the trace repository, and click <strong>Run</strong>. Until then, admin approval for new accounts is not enforced. (Only admins see this.)";
+      document.querySelector("main .notice")?.after(warning);
+    }
     const footer = document.querySelector("main > footer");
     if (footer)
       footer.textContent =
