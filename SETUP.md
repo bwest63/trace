@@ -154,10 +154,11 @@ Admins see **Accounts** in the sidebar.
 
 TRACE always keeps at least one active admin and refuses any change that would leave none.
 
-**Sign-up:**
+**Sign-up:** choose how new people get in.
 
-- **Invite-only sign-up** off (the default): anyone with the TRACE link can create an OC/T account.
-- **Invite-only sign-up** on: only emails on the invite list can create an account. Everyone else sees "This email hasn't been invited to TRACE." People who already have accounts aren't affected.
+- **Open** (both switches off, the default): anyone with the TRACE link can create an OC/T account.
+- **Require admin approval for new accounts:** anyone with the link can create an account, but it lands in **Waiting for approval** at the top of the Accounts page. The person sees "Waiting for approval" and no data until an admin chooses **Approve as OC/T**, **Approve as admin**, or **Decline**. Once approved, they tap **Check again** and they're in. **Decline** leaves the account without access; it moves to People, where you can restore it later. When anyone is waiting, admins see a number on **Accounts** in the sidebar and a notice when they open TRACE. Invited emails skip the wait.
+- **Invite-only sign-up:** only emails on the invite list can create an account. Everyone else sees "This email hasn't been invited to TRACE." People who already have accounts aren't affected.
 - **Add invite:** enter an email and choose **OC/T** or **Admin**. The person opens TRACE, chooses **Create an account**, and uses that email. The invite then disappears from the list. An invite also sets the role in open mode, so you can invite another admin directly.
 
 **Forgotten passwords:** on the sign-in screen, people choose **Forgot password?** and enter their email. They get a reset link that opens TRACE on a "Choose a new password" screen. This needs the **URL Configuration** step at the end of Step 5. Supabase's built-in email sender only sends a few emails per hour.
@@ -221,4 +222,6 @@ TRACE installs like an app: its own icon, full screen with no browser bars, and 
 | The Accounts page says it's unavailable, or "Could not find the function" | Re-run `supabase/schema.sql` (Step 2) so the database has the account functions. |
 | A password-reset link opens the wrong page or says the link is invalid | Set the **Site URL** and **Redirect URLs** (end of Step 5). Links expire after a while and work once; request a new one. |
 | "This email hasn't been invited to TRACE" | Invite-only sign-up is on. An admin adds the email on the Accounts page. |
+| A new OC/T sees "Waiting for approval" | Admin approval is on. An admin approves them on the Accounts page; then they tap **Check again**. |
+| The approval switch or waiting list doesn't appear | Re-run `supabase/schema.sql` (Step 2) so the database has the approval feature. |
 | TRACE won't load at all with no signal | The page itself needs a connection to open. Once open, it keeps working offline. |

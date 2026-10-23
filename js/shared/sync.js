@@ -67,6 +67,7 @@ const TraceSync = (function () {
     active: true,
     // The Supabase client, for admin features that talk to the database directly.
     db: () => client,
+    toast: (message) => toast(message),
     start,
     attach,
     notify,
@@ -748,12 +749,21 @@ const TraceSync = (function () {
     });
   }
   // An admin turned this account's access off; the database already hides all data from it.
+  // Also shown to new sign-ups waiting for an admin's approval.
   function noAccessScreen() {
-    const shade = authCard(`
-        <h1>Access turned off</h1>
+    const shade = authCard(
+      api.pending
+        ? `<h1>Waiting for approval</h1>
+        <p class="trace-auth-sub">Your account, ${esc(api.displayName)}, has been created. A TRACE admin needs to approve it before you can use TRACE. Check back once you've been told it's approved.</p>
+        <button class="primary" type="button" data-check>Check again</button>
+        <button class="text-link" type="button" data-signout>Sign out</button>`
+        : `<h1>Access turned off</h1>
         <p class="trace-auth-sub">A TRACE admin has turned off access for ${esc(api.displayName)}. Ask an admin to restore it.</p>
-        <button class="primary" type="button">Sign out</button>`);
-    shade.querySelector("button").onclick = signOut;
+        <button class="primary" type="button" data-signout>Sign out</button>`,
+    );
+    shade.querySelector("[data-signout]").onclick = signOut;
+    const check = shade.querySelector("[data-check]");
+    if (check) check.onclick = () => location.reload();
     return new Promise(() => {}); // Start-up stops here.
   }
   async function loadProfile(user) {
@@ -762,7 +772,7 @@ const TraceSync = (function () {
     let profile = cached?.id === user.id ? cached : null;
     const { data, error } = await client
       .from("profiles")
-      .select("display_name,role,active")
+      .select("display_name,role,active,approval_pending")
       .eq("id", user.id)
       .maybeSingle();
     if (!error && data) {
@@ -776,6 +786,7 @@ const TraceSync = (function () {
       "OC/T";
     api.isAdmin = profile?.role === "admin" && profile?.active !== false;
     api.active = profile?.active !== false;
+    api.pending = profile?.approval_pending === true;
   }
 
   // ---------- Start-up (before app scripts) ----------

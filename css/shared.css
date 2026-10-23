@@ -269,6 +269,28 @@
   border-color: #b78d3f;
   color: #f5d084;
 }
+.trace-acct-status.pending {
+  border-color: #b78d3f;
+  color: #f5d084;
+}
+.trace-acct-waiting {
+  border-color: #806e44;
+}
+.trace-nav-badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #c6a252;
+  color: #10161a;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  text-align: center;
+}
+.trace-nav-badge[hidden] {
+  display: none;
+}
 .trace-acct-row.off .trace-acct-status {
   border-color: #b6575b;
   color: #ffadad;

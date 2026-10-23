@@ -10,7 +10,8 @@
 --   • Evaluations, step claims, and OC/T log entries: anyone can add their own;
 --     only the author or an admin can change or delete them.
 --   • The first account created becomes the admin. Admins manage everyone else
---     on TRACE's Accounts page.
+--     on TRACE's Accounts page, including approving new sign-ups when
+--     "Require admin approval" is on.
 
 -- ---------- Profiles, roles, and access ----------
 create table if not exists public.profiles (
@@ -21,6 +22,8 @@ create table if not exists public.profiles (
 );
 alter table public.profiles add column if not exists email text;
 alter table public.profiles add column if not exists active boolean not null default true;
+-- New sign-up waiting for an admin's approval (approval mode). Such accounts are not active.
+alter table public.profiles add column if not exists approval_pending boolean not null default false;
 alter table public.profiles enable row level security;
 update public.profiles p set email = lower(u.email)
   from auth.users u
@@ -63,8 +66,9 @@ as $$
 $$;
 
 -- Creates the profile for each new sign-in account. In invite-only mode, an
--- email that is not on the invite list is refused (the very first account is
--- always allowed so a new project can get its admin).
+-- email that is not on the invite list is refused. In approval mode, an
+-- uninvited account starts without access until an admin approves it. The very
+-- first account is always allowed and active so a new project gets its admin.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -75,17 +79,22 @@ declare
   first_account boolean := not exists (select 1 from public.profiles);
   invite_only boolean := coalesce(
     (select (value ->> 'enabled')::boolean from public.trace_settings where key = 'invite_only'), false);
+  approval_required boolean := coalesce(
+    (select (value ->> 'enabled')::boolean from public.trace_settings where key = 'approval_required'), false);
   invited_role text := (select role from public.account_invites where email = lower(new.email));
+  needs_approval boolean := not first_account and approval_required and invited_role is null;
 begin
   if not first_account and invite_only and invited_role is null then
     raise exception 'TRACE: % has not been invited', new.email using errcode = '42501';
   end if;
-  insert into public.profiles (id, display_name, role, email)
+  insert into public.profiles (id, display_name, role, email, active, approval_pending)
   values (
     new.id,
     coalesce(nullif(trim(new.raw_user_meta_data ->> 'display_name'), ''), split_part(new.email, '@', 1)),
     case when first_account then 'admin' else coalesce(invited_role, 'oct') end,
-    lower(new.email)
+    lower(new.email),
+    not needs_approval,
+    needs_approval
   );
   delete from public.account_invites where email = lower(new.email);
   return new;
@@ -148,13 +157,16 @@ begin
 end;
 $$;
 
-create or replace function public.admin_list_accounts()
+-- The result columns changed over time; drop first so re-running the script can redefine it.
+drop function if exists public.admin_list_accounts();
+create function public.admin_list_accounts()
 returns table (
   id uuid,
   email text,
   display_name text,
   role text,
   active boolean,
+  approval_pending boolean,
   created_at timestamptz,
   last_sign_in_at timestamptz
 )
@@ -167,10 +179,10 @@ begin
   perform public.trace_require_admin();
   return query
     select p.id, coalesce(p.email, lower(u.email)), p.display_name, p.role, p.active,
-           p.created_at, u.last_sign_in_at
+           p.approval_pending, p.created_at, u.last_sign_in_at
     from public.profiles p
     left join auth.users u on u.id = p.id
-    order by p.active desc, p.display_name;
+    order by p.approval_pending desc, p.active desc, p.display_name;
 end;
 $$;
 
@@ -206,7 +218,26 @@ begin
     end if;
     perform public.trace_keep_an_admin(target);
   end if;
-  update public.profiles set active = make_active where id = target;
+  -- Restoring access approves a waiting account; turning it off declines it.
+  update public.profiles set active = make_active, approval_pending = false where id = target;
+end;
+$$;
+
+-- Approves a waiting sign-up with the chosen role.
+create or replace function public.admin_approve(target uuid, new_role text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.trace_require_admin();
+  if new_role not in ('oct', 'admin') then
+    raise exception 'Unknown role: %', new_role;
+  end if;
+  update public.profiles
+    set active = true, approval_pending = false, role = new_role
+    where id = target;
 end;
 $$;
 
@@ -227,11 +258,13 @@ $$;
 
 revoke execute on function
   public.admin_list_accounts(), public.admin_set_role(uuid, text),
-  public.admin_set_active(uuid, boolean), public.admin_rename(uuid, text)
+  public.admin_set_active(uuid, boolean), public.admin_rename(uuid, text),
+  public.admin_approve(uuid, text)
   from public, anon;
 grant execute on function
   public.admin_list_accounts(), public.admin_set_role(uuid, text),
-  public.admin_set_active(uuid, boolean), public.admin_rename(uuid, text)
+  public.admin_set_active(uuid, boolean), public.admin_rename(uuid, text),
+  public.admin_approve(uuid, text)
   to authenticated;
 
 -- ---------- Shared TRACE data ----------
