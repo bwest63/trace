@@ -211,12 +211,18 @@
 }
 .trace-acct-list {
   display: grid;
-  gap: 8px;
+  /* One set of columns for every row, so the badges line up even though each
+     row's buttons differ in width (rows use subgrid to share them). */
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) auto;
+  gap: 8px 14px;
   margin: 8px 0 12px;
+}
+.trace-acct-list > * {
+  grid-column: 1 / -1;
 }
 .trace-acct-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) auto;
+  grid-template-columns: subgrid;
   gap: 14px;
   align-items: center;
   padding: 13px 14px;
@@ -312,6 +318,7 @@
   font-size: 12px;
 }
 @media (max-width: 850px) {
+  .trace-acct-list,
   .trace-acct-row,
   .trace-acct-invite {
     grid-template-columns: minmax(0, 1fr);
