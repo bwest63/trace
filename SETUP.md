@@ -83,7 +83,7 @@ The publishable key is meant to be visible in web pages; the access rules from S
 1. On GitHub, open this repository's **Settings → Pages**.
 2. Under **Build and deployment**, set **Source** to **Deploy from a branch**, pick **main** and **/ (root)**, and click **Save**.
 3. After a minute or two, TRACE is at:
-   **https://bwest63.github.io/trace/**
+   **https://bwest63.github.io/trace/** (or **https://tracedashboard.com** once the domain below is set up)
 
 The page itself is public (only signed-in accounts can see any data). GitHub Pages needs a public repository on the free GitHub plan.
 
