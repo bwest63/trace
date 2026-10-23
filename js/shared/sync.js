@@ -83,6 +83,7 @@ const TraceSync = (function () {
   let attached = false;
   let renderTimer = 0;
   let renderPending = false;
+  let signInNeeded = false; // Online, but the sign-in could not be renewed.
 
   function load(key, fallback) {
     try {
@@ -248,6 +249,22 @@ const TraceSync = (function () {
   }
   async function flush() {
     if (flushing || !outbox.length || !client) return;
+    // Without a valid sign-in the database would refuse every change as anonymous,
+    // and refusals are dropped from the queue. Keep the queue until the OC/T signs in again.
+    const { data: auth, error: authError } = await client.auth.getSession();
+    if (!auth.session) {
+      if (authError?.name === "AuthRetryableFetchError" || !navigator.onLine)
+        setOnline(false);
+      else if (!signInNeeded) {
+        signInNeeded = true;
+        updateStatus();
+        toast(
+          "Your sign-in has expired. Tap the status chip to sign in again and send your saved changes.",
+        );
+      }
+      return;
+    }
+    signInNeeded = false;
     flushing = true;
     updateStatus();
     try {
@@ -416,18 +433,24 @@ const TraceSync = (function () {
     if (!chip) return;
     const n = outbox.length;
     const pending = n ? ` · ${n} change${n === 1 ? "" : "s"} waiting` : "";
-    const [stateName, text] = !online
-      ? ["offline", "Offline" + pending]
-      : n
-        ? ["syncing", "Syncing" + pending]
-        : live
-          ? ["live", "Live"]
-          : ["connecting", "Connecting…"];
+    const [stateName, text] = signInNeeded
+      ? ["signin", "Sign in to sync" + pending]
+      : !online
+        ? ["offline", "Offline" + pending]
+        : n
+          ? ["syncing", "Syncing" + pending]
+          : live
+            ? ["live", "Live"]
+            : ["connecting", "Connecting…"];
     chip.dataset.state = stateName;
     chip.textContent = text;
-    chip.title = !online
-      ? "No connection. Your changes are saved on this device and sent when the connection returns."
-      : "Changes from every OC/T appear here as they are saved.";
+    chip.title = signInNeeded
+      ? "Your sign-in expired. Tap to sign in again; your saved changes are kept and sent afterwards."
+      : !online
+        ? "No connection. Your changes are saved on this device and sent when the connection returns."
+        : "Changes from every OC/T appear here as they are saved.";
+    // Signing in again keeps this device's queue: the same OC/T's outbox survives a reload.
+    chip.onclick = signInNeeded ? () => location.reload() : null;
   }
   function toast(message) {
     let el = document.getElementById("traceToast");
@@ -772,14 +795,26 @@ const TraceSync = (function () {
     });
     let {
       data: { session },
+      error: sessionError,
     } = await client.auth.getSession();
     await new Promise((r) => setTimeout(r, 0)); // The recovery event is announced on the next tick.
     if (session && (resetLink || resetEvent)) await newPasswordScreen();
+    // Opened offline after the sign-in token expired: carry on as the last OC/T signed in on
+    // this device. Changes queue as usual; the stored refresh token renews the sign-in once
+    // the connection returns (or the OC/T is asked to sign in again before anything is sent).
+    const owner = localStorage.getItem(OWNER_KEY);
+    const cachedProfile = load(PROFILE_KEY, null);
+    if (
+      !session &&
+      owner &&
+      cachedProfile?.id === owner &&
+      (!navigator.onLine || sessionError?.name === "AuthRetryableFetchError")
+    )
+      session = { user: { id: owner } };
     if (!session) session = await signInScreen();
     await loadProfile(session.user);
     if (!api.active) await noAccessScreen();
 
-    const owner = localStorage.getItem(OWNER_KEY);
     if (owner && owner !== api.userId) clearCache();
     else if (!owner) keepPreSharedCopy();
     localStorage.setItem(OWNER_KEY, api.userId);

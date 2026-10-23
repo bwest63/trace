@@ -164,6 +164,21 @@ TRACE always keeps at least one active admin and refuses any change that would l
 
 **Deleting an account permanently** isn't possible from TRACE (it needs Supabase's secret key, which must never be in a web page). Use Supabase → **Authentication → Users** → **⋯** → **Delete user**. Their saved records stay in TRACE, and from then on only admins can change them. Turning off access is usually enough.
 
+## Install TRACE as an app
+
+TRACE installs like an app: its own icon, full screen with no browser bars, and it opens even with no signal.
+
+| Device | How |
+| --- | --- |
+| **iPhone / iPad** | Open TRACE in **Safari** → **Share** (square with an arrow) → **Add to Home Screen**. The sidebar's **Install TRACE app** button shows the same steps. |
+| **Android** | Open TRACE in **Chrome** → **Install TRACE app** in the sidebar, or **⋮ → Install app**. |
+| **Windows / Mac** | Open TRACE in **Chrome** or **Edge** → **Install TRACE app** in the sidebar, or the install icon at the right end of the address bar. |
+
+- **Updates install themselves.** When a new version is published, TRACE downloads it in the background and shows **"A TRACE update is ready"** with a **Reload** button.
+- **Offline start-up** works once TRACE has been opened online on that device at least once.
+- **If your sign-in expires while you're offline,** TRACE keeps working as you and queues your changes. Back online, it renews the sign-in automatically. If it can't, the status chip says **Sign in to sync**; tap it and sign in, and the queued changes are sent.
+- **Word downloads on iPhone:** in the installed app, exported files open in a preview. Use **Share → Save to Files** to keep them.
+
 ## Using shared TRACE
 
 **The status chip** in the page header:

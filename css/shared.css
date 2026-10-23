@@ -303,7 +303,60 @@
     display: none;
   }
 }
+/* Installed-app support (js/pwa.js). */
+.trace-install {
+  margin: 14px 10px 0;
+}
+.trace-install button {
+  width: 100%;
+  background: linear-gradient(90deg, #3c3420aa, #202427);
+  border: 1px solid #6d5b35;
+  color: #f2d07d;
+  border-radius: 7px;
+  padding: 9px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+.trace-install button:hover {
+  border-color: #d5ac51;
+}
+.trace-update {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 1100;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 10px 12px 10px 16px;
+  border: 1px solid #b78d3f;
+  border-radius: 8px;
+  background: #1a232a;
+  color: #f2e4bd;
+  font-size: 13px;
+  box-shadow: 0 12px 40px #000a;
+}
+.trace-update .primary {
+  padding: 8px 14px;
+}
+@media (max-width: 850px) {
+  .trace-install {
+    margin: 10px 0 0;
+  }
+}
+.trace-sync-chip[data-state="signin"] {
+  border-color: #b6575b;
+  color: #ffadad;
+  cursor: pointer;
+}
+
 @media print {
+  .trace-install,
+  .trace-update,
   .trace-sync-chip,
   .trace-account,
   .trace-toast {
