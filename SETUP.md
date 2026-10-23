@@ -177,6 +177,8 @@ TRACE installs like an app: its own icon, full screen with no browser bars, and 
 
 - **Updates install themselves.** When a new version is published, TRACE downloads it in the background and shows **"A TRACE update is ready"** with a **Reload** button.
 - **Offline start-up** works once TRACE has been opened online on that device at least once.
+- **Offline sign-in:** after you've signed in online once on a device, you can sign in there again with no signal, even after signing out. TRACE keeps a scrambled check of your password on the device (never the password itself). Your changes queue and are sent after your next online sign-in; the status chip shows **Sign in to sync** when that's needed.
+- **The first sign-in on each device needs internet.** On iPhone, an app added to the Home Screen keeps its own storage, separate from Safari, so sign in once inside the installed app while you have signal.
 - **If your sign-in expires while you're offline,** TRACE keeps working as you and queues your changes. Back online, it renews the sign-in automatically. If it can't, the status chip says **Sign in to sync**; tap it and sign in, and the queued changes are sent.
 - **Word downloads on iPhone:** in the installed app, exported files open in a preview. Use **Share → Save to Files** to keep them.
 
@@ -207,7 +209,7 @@ TRACE installs like an app: its own icon, full screen with no browser bars, and 
 - **Several OC/Ts can rate the same task.** Each save is a separate record, so nobody overwrites anyone else. The evaluation form shows everyone's latest step ratings, and conflicting ratings are flagged, as before.
 - **Live updates won't interrupt your work.** If you're typing or have unsaved ratings, the screen waits to refresh until you're done.
 - **Workspace notes and attachments stay private to your device.** Log entries you save are shared and feed the event AAR.
-- **Sign out on shared devices.** Signing out clears TRACE's copy of the data from that browser.
+- **Signing out keeps your data on the device** so you can sign back in, even offline, and pick up where you left off; any unsent changes are sent at your next sign-in. If a **different** person signs in on that device, TRACE clears the previous person's copy first, including changes that hadn't been sent.
 - **The free Supabase plan pauses projects after about a week without use.** If TRACE stops connecting after a quiet period, open the Supabase dashboard and resume the project.
 
 ## Troubleshooting

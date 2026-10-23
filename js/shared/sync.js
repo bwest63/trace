@@ -18,6 +18,8 @@ const TraceSync = (function () {
   const PROFILE_KEY = "trace_sync_profile_v1";
   const OWNER_KEY = "trace_sync_owner_v1";
   const PRE_SHARED_KEY = "trace_pre_shared_backup_v1";
+  const OFFLINE_LOGIN_KEY = "trace_offline_login_v1";
+  const SIGNED_OUT_KEY = "trace_signed_out_v1"; // Set by Sign out; cleared by the next sign-in.
   const WORKSPACE_KEY = "trace_oct_workspace_v23";
   const FILE_BUCKET = "teo-sources";
   const UPLOAD_CHUNK = 200;
@@ -341,6 +343,13 @@ const TraceSync = (function () {
   // Catch up after being offline or asleep: send what is queued, then reload everything.
   async function resync() {
     if (!client) return;
+    // Signed in offline (or the sign-in expired): anonymous reads return no rows and would
+    // empty this device's copy, so wait for a real sign-in first.
+    const { data: auth } = await client.auth.getSession();
+    if (!auth.session) {
+      await flush(); // Sets the "Sign in to sync" state when online.
+      return;
+    }
     await flush();
     try {
       await pullAll();
@@ -473,7 +482,6 @@ const TraceSync = (function () {
       ...new Set(COLLECTIONS.map((c) => c.key)),
       OUTBOX_KEY,
       SYNCED_KEY,
-      PROFILE_KEY,
       OWNER_KEY,
       WORKSPACE_KEY,
     ])
@@ -481,16 +489,18 @@ const TraceSync = (function () {
     outbox = [];
     synced = {};
   }
+  // Keeps this device's copy and any unsent changes for the same OC/T, so they can sign in
+  // again (even offline) and carry on. A different OC/T signing in here clears them (start()).
   async function signOut() {
     if (
       outbox.length &&
       !confirm(
-        `${outbox.length} change(s) have not reached the shared database yet. Signing out now discards them. Sign out anyway?`,
+        `${outbox.length} change(s) haven't reached the shared database yet. They stay on this device and are sent the next time you sign in here. If someone else signs in on this device first, they're discarded. Sign out?`,
       )
     )
       return;
-    await client.auth.signOut().catch(() => {});
-    clearCache();
+    await client.auth.signOut({ scope: "local" }).catch(() => {});
+    localStorage.setItem(SIGNED_OUT_KEY, "1");
     location.reload();
   }
 
@@ -605,6 +615,58 @@ const TraceSync = (function () {
   }
   const appAddress = () => location.href.split("#")[0].split("?")[0];
 
+  // Offline sign-in: after a successful online sign-in, keep a salted PBKDF2 check of the
+  // password (never the password itself) so the same OC/T can sign in on this device without
+  // signal. Their changes queue and are sent after the next online sign-in.
+  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  async function passwordCheck(password, salt) {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(password),
+      "PBKDF2",
+      false,
+      ["deriveBits"],
+    );
+    const bits = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", hash: "SHA-256", salt, iterations: 210000 },
+      key,
+      256,
+    );
+    return b64(bits);
+  }
+  async function rememberForOffline(email, password, user) {
+    if (!crypto?.subtle || !email || !password || !user?.id) return;
+    try {
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const logins = load(OFFLINE_LOGIN_KEY, {});
+      logins[email.toLowerCase()] = {
+        userId: user.id,
+        salt: b64(salt),
+        check: await passwordCheck(password, salt),
+        profile: logins[email.toLowerCase()]?.profile || null,
+      };
+      store(OFFLINE_LOGIN_KEY, logins);
+    } catch (e) {
+      console.warn("TRACE offline sign-in unavailable", e);
+    }
+  }
+  // Returns a stand-in session, null if this email never signed in online here, or false if the password is wrong.
+  async function offlineSignIn(email, password) {
+    const record = load(OFFLINE_LOGIN_KEY, {})[email.toLowerCase()];
+    if (!record || !crypto?.subtle) return null;
+    if ((await passwordCheck(password, unb64(record.salt))) !== record.check)
+      return false;
+    if (record.profile)
+      store(PROFILE_KEY, { id: record.userId, ...record.profile });
+    return { user: { id: record.userId, email }, offline: true };
+  }
+  const isNetworkFailure = (err) =>
+    !navigator.onLine ||
+    err?.name === "AuthRetryableFetchError" ||
+    err?.status === 0 ||
+    /fetch/i.test(err?.message || "");
+
   function signInScreen(message) {
     return new Promise((resolve) => {
       const shade = authCard(`
@@ -672,7 +734,18 @@ const TraceSync = (function () {
           signup: "Creating account…",
           reset: "Sending…",
         }[mode];
+        const tryOffline = async () => {
+          const session = await offlineSignIn(email, password);
+          if (session === null)
+            return (msg.textContent =
+              "No connection. The first sign-in on this device (including in a newly installed TRACE app) needs internet. After that, you can sign in here offline.");
+          if (session === false)
+            return (msg.textContent = "Wrong email or password.");
+          shade.remove();
+          resolve(session);
+        };
         try {
+          if (mode === "signin" && !navigator.onLine) return await tryOffline();
           if (mode === "reset") {
             const { error } = await client.auth.resetPasswordForEmail(email, {
               redirectTo: appAddress(),
@@ -703,12 +776,17 @@ const TraceSync = (function () {
             );
             return;
           }
+          await rememberForOffline(email, password, data.session.user);
           shade.remove();
           resolve(data.session);
         } catch (err) {
-          msg.textContent = navigator.onLine
-            ? friendlyAuthError(err)
-            : "No connection. Connect to the internet to sign in.";
+          if (mode === "signin" && isNetworkFailure(err)) await tryOffline();
+          else
+            msg.textContent = isNetworkFailure(err)
+              ? mode === "signup"
+                ? "No connection. Creating an account needs internet."
+                : "No connection. Sending a reset link needs internet."
+              : friendlyAuthError(err);
         } finally {
           button.disabled = false;
         }
@@ -744,7 +822,7 @@ const TraceSync = (function () {
         if (error) return (msg.textContent = friendlyAuthError(error));
         history.replaceState(null, "", appAddress());
         shade.remove();
-        resolve();
+        resolve(form.password.value);
       };
       form.password.focus();
     });
@@ -789,6 +867,11 @@ const TraceSync = (function () {
         profile = { id: user.id, ...data };
         store(PROFILE_KEY, profile);
         api.schemaOutdated = i > 0;
+        // Keep the offline sign-in's copy of name and role current.
+        const logins = load(OFFLINE_LOGIN_KEY, {});
+        for (const record of Object.values(logins))
+          if (record.userId === user.id) record.profile = data;
+        store(OFFLINE_LOGIN_KEY, logins);
       }
       break;
     }
@@ -822,7 +905,12 @@ const TraceSync = (function () {
       error: sessionError,
     } = await client.auth.getSession();
     await new Promise((r) => setTimeout(r, 0)); // The recovery event is announced on the next tick.
-    if (session && (resetLink || resetEvent)) await newPasswordScreen();
+    if (session && (resetLink || resetEvent))
+      await rememberForOffline(
+        session.user.email,
+        await newPasswordScreen(),
+        session.user,
+      );
     // Opened offline after the sign-in token expired: carry on as the last OC/T signed in on
     // this device. Changes queue as usual; the stored refresh token renews the sign-in once
     // the connection returns (or the OC/T is asked to sign in again before anything is sent).
@@ -830,12 +918,15 @@ const TraceSync = (function () {
     const cachedProfile = load(PROFILE_KEY, null);
     if (
       !session &&
+      !localStorage.getItem(SIGNED_OUT_KEY) &&
       owner &&
       cachedProfile?.id === owner &&
       (!navigator.onLine || sessionError?.name === "AuthRetryableFetchError")
     )
-      session = { user: { id: owner } };
+      session = { user: { id: owner }, offline: true };
     if (!session) session = await signInScreen();
+    api.signedInOffline = Boolean(session.offline);
+    localStorage.removeItem(SIGNED_OUT_KEY);
     await loadProfile(session.user);
     if (!api.active) await noAccessScreen();
 
@@ -843,6 +934,11 @@ const TraceSync = (function () {
     else if (!owner) keepPreSharedCopy();
     localStorage.setItem(OWNER_KEY, api.userId);
 
+    // Without a real sign-in the database returns nothing, so work from this device's copy.
+    if (api.signedInOffline) {
+      online = false;
+      return;
+    }
     try {
       await pullAll();
       online = true;
@@ -979,6 +1075,10 @@ const TraceSync = (function () {
     }, 20000);
     subscribe();
     updateStatus();
+    if (api.signedInOffline)
+      toast(
+        "Signed in offline. Your changes are saved on this device and sync after your next online sign-in.",
+      );
     flush();
   }
 
