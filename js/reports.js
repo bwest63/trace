@@ -283,9 +283,51 @@
     return { sustains: sustains.items, improves: improves.items };
   }
 
+  /* Edits made on the AAR page, saved with the report details:
+   *   edits.items[key] = { text, recs, kind: "S"|"I", hidden, order }
+   *   edits.added      = [{ id, teoId, text, recs, kind, hidden, order }]
+   * An item's key comes from its compiled text, so an edit stays attached
+   * until the OC/T's source wording changes. */
+  const emptyEdits = () => ({ items: {}, added: [] });
+  function itemKey(teoId, kind, it) {
+    return `${teoId}|${kind}|${keyOf(it.text) || "r " + keyOf(it.recs[0] || "")}`;
+  }
+  function applyEdits(teoId, compiled, edits) {
+    const e = edits || emptyEdits();
+    const base = [
+      ...compiled.sustains.map((it, i) => ({ ...it, kind: "S", idx: i })),
+      ...compiled.improves.map((it, i) => ({ ...it, kind: "I", idx: 1000 + i })),
+    ].map((it) => {
+      const key = itemKey(teoId, it.kind, it);
+      const ov = e.items?.[key] || {};
+      return {
+        key,
+        source: { text: it.text, recs: it.recs, kind: it.kind },
+        edited: Object.keys(ov).some((k) => k !== "order"),
+        text: ov.text ?? it.text,
+        recs: ov.recs ?? it.recs,
+        kind: ov.kind || it.kind,
+        hidden: !!ov.hidden,
+        order: ov.order ?? it.idx,
+      };
+    });
+    const added = (e.added || [])
+      .filter((a) => a.teoId === teoId)
+      .map((a) => ({ ...a, key: "add|" + a.id, added: true, recs: a.recs || [], order: a.order ?? 5000 }));
+    const all = [...base, ...added].sort(
+      (a, b) => (a.kind === b.kind ? a.order - b.order : a.kind === "S" ? -1 : 1),
+    );
+    const visible = (k) =>
+      all
+        .filter((it) => it.kind === k && !it.hidden && (clean(it.text) || it.recs.some(clean)))
+        .map((it) => ({ text: sentence(it.text), recs: it.recs.map(sentence).filter(Boolean) }));
+    return { all, sustains: visible("S"), improves: visible("I") };
+  }
+
   function compileReport(eventId, unitId) {
     const ev = findEvent(eventId);
     const unit = trace18.units.find((u) => u.id === unitId);
+    const details = getDetails(eventId, unitId);
     const recs = allRecords().filter(
       (r) => String(r.exerciseId) === String(eventId) && r.unitId === unitId,
     );
@@ -301,13 +343,13 @@
         assigned: assigned.includes(id),
         evaluations: rs.length,
         evaluators: [...new Set(rs.map((r) => r.evaluator).filter(Boolean))],
-        ...compileTask(t, rs),
+        ...applyEdits(id, compileTask(t, rs), details.edits),
       };
     });
     return {
       event: ev,
       unit,
-      details: getDetails(eventId, unitId),
+      details,
       teos,
       observed: teos.filter((t) => t.evaluations),
       recordCount: recs.length,
@@ -636,22 +678,37 @@
   const h = (s) => esc(String(s ?? ""));
   let reportUnit = "";
 
-  function previewHTML(rep) {
+  function itemHTML(t, it, i, list) {
+    const recs = it.recs.join("\n");
+    return `<div class="trace-rpt-item ${it.hidden ? "is-hidden" : ""}" data-key="${h(it.key)}" data-teo="${h(t.id)}">
+<div class="trace-rpt-itembar">
+<div class="trace-rpt-kind" role="group" aria-label="Sustain or improve"><button type="button" data-act="kind" data-kind="S" class="${it.kind === "S" ? "on" : ""}">Sustain</button><button type="button" data-act="kind" data-kind="I" class="${it.kind === "I" ? "on" : ""}">Improve</button></div>
+<label class="trace-rpt-include"><input type="checkbox" data-act="include" ${it.hidden ? "" : "checked"}> Include in reports</label>
+<span class="trace-rpt-tag">${it.added ? "Added" : it.edited ? "Edited" : ""}</span>
+<span class="trace-rpt-tools"><button type="button" class="secondary" data-act="up" ${i === 0 ? "disabled" : ""} title="Move up" aria-label="Move up">↑</button><button type="button" class="secondary" data-act="down" ${i === list.length - 1 ? "disabled" : ""} title="Move down" aria-label="Move down">↓</button>${
+      it.added
+        ? '<button type="button" class="secondary" data-act="delete">Delete</button>'
+        : it.edited
+          ? '<button type="button" class="secondary" data-act="reset" title="Go back to the wording from the evaluations">Reset</button>'
+          : ""
+    }</span></div>
+<label>Paragraph<textarea rows="${Math.min(8, Math.max(2, Math.ceil(it.text.length / 95)))}" data-field="text">${h(it.text)}</textarea></label>
+<label>Recommendations (one per line)<textarea rows="${Math.max(1, it.recs.length)}" data-field="recs">${h(recs)}</textarea></label></div>`;
+  }
+
+  function editorHTML(rep) {
     if (!rep.observed.length)
       return '<p class="hint">No saved evaluations for this unit at this event yet. The reports will have no observations until OC/Ts save evaluations.</p>';
     return rep.observed
       .map((t) => {
-        const list = (label, items) =>
-          items.length
-            ? `<div class="trace-rpt-list"><b>${label}</b><ul>${items
-                .map(
-                  (it) =>
-                    `<li>${h(it.text)}${it.recs.length ? `<ul>${it.recs.map((r) => `<li><b>Recommendation:</b> ${h(r)}</li>`).join("")}</ul>` : ""}</li>`,
-                )
-                .join("")}</ul></div>`
-            : "";
-        const body = list("Sustain", t.sustains) + list("Improve", t.improves);
-        return `<div class="trace-rpt-teo"><div class="trace-rpt-teohead"><strong>${h(t.code)} ${h(t.title)}</strong><small>${t.evaluations} evaluation${t.evaluations === 1 ? "" : "s"}${t.evaluators.length ? " · " + h(t.evaluators.join(", ")) : ""}</small></div>${body || '<p class="hint">Evaluated, but no sustain or improve inputs were entered.</p>'}</div>`;
+        const group = (kind, label) => {
+          const list = t.all.filter((it) => it.kind === kind);
+          return `<div class="trace-rpt-group"><div class="trace-rpt-grouphead"><b>${label}</b><button type="button" class="secondary" data-act="add" data-teo="${h(t.id)}" data-kind="${kind}">＋ Add ${label.toLowerCase()} paragraph</button></div>${
+            list.map((it, i) => itemHTML(t, it, i, list)).join("") ||
+            `<p class="hint">No ${label.toLowerCase()} paragraphs.</p>`
+          }</div>`;
+        };
+        return `<div class="trace-rpt-teo"><div class="trace-rpt-teohead"><strong>${h(t.code)} ${h(t.title)}</strong><small>${t.evaluations} evaluation${t.evaluations === 1 ? "" : "s"}${t.evaluators.length ? " · " + h(t.evaluators.join(", ")) : ""}</small></div>${group("S", "Sustain")}${group("I", "Improve")}</div>`;
       })
       .join("");
   }
@@ -666,6 +723,16 @@
     // Directly under the training event picker, which these reports follow.
     sel.closest("label").insertAdjacentElement("afterend", panel);
 
+    let lastStatus = "";
+    // Redraw after a change without losing the reader's place.
+    const redraw = () => {
+      const scrollers = [document.scrollingElement, ...document.querySelectorAll("main, #content")].filter(Boolean);
+      const at = scrollers.map((el) => el.scrollTop);
+      const open = panel.querySelector(".trace-rpt-details")?.open;
+      draw();
+      if (open) panel.querySelector(".trace-rpt-details").open = true;
+      scrollers.forEach((el, i) => (el.scrollTop = at[i]));
+    };
     const draw = () => {
       const ev = findEvent(sel.value);
       const unitIds = (ev?.unitIds || []).filter((id) => trace18.units.some((u) => u.id === id));
@@ -693,11 +760,12 @@
               : `<input type="${type === "date" ? "date" : "text"}" data-rpt="${k}" value="${h(type === "date" ? d[k] || new Date().toLocaleDateString("en-CA") : d[k])}">`
           }</label>`,
       ).join("")}</div><button class="secondary" id="traceRptSave">Save report details</button></details>
-<h3 class="trace-rpt-h3">Compiled sustains &amp; improves <small>${rep.recordCount} evaluation${rep.recordCount === 1 ? "" : "s"}</small></h3>
-<p class="hint">Built from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes. Duplicate entries from different OC/Ts are merged. Edit the source evaluations to change the wording.</p>
-<div id="traceRptPreview">${previewHTML(rep)}</div>`;
+<h3 class="trace-rpt-h3">Sustains &amp; improves <small>${rep.recordCount} evaluation${rep.recordCount === 1 ? "" : "s"}</small></h3>
+<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p>
+<div id="traceRptPreview">${editorHTML(rep)}</div>`;
 
-      const status = (m) => (document.getElementById("traceRptStatus").textContent = m);
+      const status = (m) => (document.getElementById("traceRptStatus").textContent = lastStatus = m);
+      status(lastStatus);
       const values = () => {
         const v = {};
         panel.querySelectorAll("[data-rpt]").forEach((el) => (v[el.dataset.rpt] = el.value));
@@ -705,19 +773,90 @@
       };
       document.getElementById("traceRptUnit").onchange = (e) => {
         reportUnit = e.target.value;
+        lastStatus = "";
         draw();
       };
       document.getElementById("traceRptSave").onclick = () => {
-        const where = saveDetails(ev.id, reportUnit, values());
-        draw();
+        const where = saveDetails(ev.id, reportUnit, { ...values(), edits: getDetails(ev.id, reportUnit).edits });
+        redraw();
         status(where === "shared" ? "Report details saved." : "Report details saved on this device.");
       };
+
+      // ---- paragraph editor
+      const persist = (mutate) => {
+        const d = getDetails(ev.id, reportUnit);
+        const e = JSON.parse(JSON.stringify(d.edits || emptyEdits()));
+        e.items ||= {};
+        e.added ||= [];
+        mutate(e);
+        const where = saveDetails(ev.id, reportUnit, { ...d, ...values(), edits: e });
+        status(where === "shared" ? "Edits saved." : "Edits saved on this device.");
+      };
+      const findItem = (el) => {
+        const card = el.closest(".trace-rpt-item");
+        const t = rep.observed.find((x) => x.id === card.dataset.teo);
+        return { t, it: t.all.find((x) => x.key === card.dataset.key) };
+      };
+      // Apply one change to an item, whether compiled (an override) or added by hand.
+      const change = (e, it, fields) => {
+        if (it.added) {
+          const a = e.added.find((x) => "add|" + x.id === it.key);
+          if (a) Object.assign(a, fields);
+          return;
+        }
+        const ov = { ...(e.items[it.key] || {}), ...fields };
+        for (const k of ["text", "kind"])
+          if (ov[k] !== undefined && ov[k] === it.source[k]) delete ov[k];
+        if (ov.recs && ov.recs.join("\n") === it.source.recs.join("\n")) delete ov.recs;
+        if (ov.hidden === false) delete ov.hidden;
+        if (Object.keys(ov).length) e.items[it.key] = ov;
+        else delete e.items[it.key];
+      };
+      const editor = document.getElementById("traceRptPreview");
+      editor.addEventListener("change", (ev2) => {
+        const el = ev2.target;
+        if (!el.dataset.field && el.dataset.act !== "include") return;
+        const { it } = findItem(el);
+        if (el.dataset.act === "include") {
+          persist((e) => change(e, it, { hidden: !el.checked }));
+          redraw();
+        } else if (el.dataset.field === "text") persist((e) => change(e, it, { text: el.value.trim() }));
+        else persist((e) => change(e, it, { recs: lines(el.value) }));
+      });
+      editor.addEventListener("click", (ev2) => {
+        const b = ev2.target.closest("button[data-act]");
+        if (!b || b.disabled) return;
+        const act = b.dataset.act;
+        if (act === "add") {
+          const t = rep.observed.find((x) => x.id === b.dataset.teo);
+          const order = Math.max(0, ...t.all.map((x) => x.order)) + 1;
+          const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+          persist((e) => e.added.push({ id, teoId: t.id, kind: b.dataset.kind, text: "", recs: [], order }));
+          redraw();
+          document.querySelector(`.trace-rpt-item[data-key="add|${id}"] textarea`)?.focus();
+          return;
+        }
+        const { t, it } = findItem(b);
+        if (act === "kind") {
+          if (it.kind === b.dataset.kind) return;
+          const order = Math.max(0, ...t.all.map((x) => x.order)) + 1;
+          persist((e) => change(e, it, { kind: b.dataset.kind, order }));
+        } else if (act === "up" || act === "down") {
+          const list = t.all.filter((x) => x.kind === it.kind);
+          const i = list.indexOf(it),
+            j = act === "up" ? i - 1 : i + 1;
+          [list[i], list[j]] = [list[j], list[i]];
+          persist((e) => list.forEach((x, n) => change(e, x, { order: n })));
+        } else if (act === "reset") persist((e) => delete e.items[it.key]);
+        else if (act === "delete") persist((e) => (e.added = e.added.filter((x) => "add|" + x.id !== it.key)));
+        redraw();
+      });
       const generate = async (kind, button) => {
         button.disabled = true;
         status(`Building ${kind}…`);
         try {
           const now = compileReport(ev.id, reportUnit);
-          now.details = { ...DEFAULTS, ...values() };
+          now.details = { ...DEFAULTS, ...values(), edits: now.details.edits };
           const blob = kind === "EXSUM" ? await buildExsum(now) : await buildFaar(now);
           const base = `${fileSafe(now.unit?.name)}_${fileSafe(ev.name)}`;
           download(blob, kind === "EXSUM" ? `EXSUM_${base}.docx` : `FAAR_${base}.pptx`);
@@ -732,7 +871,10 @@
       document.getElementById("traceRptExsum").onclick = (e) => generate("EXSUM", e.target);
       document.getElementById("traceRptFaar").onclick = (e) => generate("FAAR", e.target);
     };
-    sel.addEventListener("change", draw);
+    sel.addEventListener("change", () => {
+      lastStatus = "";
+      draw();
+    });
     draw();
   }
 
@@ -750,7 +892,22 @@
 .trace-rpt-teo{border:1px solid #40515b;border-radius:10px;padding:12px 14px;margin:10px 0;background:#18242b}
 .trace-rpt-teohead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px}
 .trace-rpt-teohead small{color:#a9bdc8}
-.trace-rpt-list{margin:6px 0}.trace-rpt-list ul{margin:4px 0 4px 18px;padding:0}.trace-rpt-list li{margin:4px 0;overflow-wrap:anywhere}
+.trace-rpt-group{margin:10px 0 4px}
+.trace-rpt-grouphead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+.trace-rpt-grouphead button{font-size:12px;padding:5px 10px}
+.trace-rpt-item{border:1px solid #33444e;border-radius:8px;padding:10px 12px;margin:8px 0;background:#121c22}
+.trace-rpt-item.is-hidden{opacity:.5}
+.trace-rpt-item label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#a9bdc8;margin-top:6px}
+.trace-rpt-item textarea{width:100%;box-sizing:border-box;font-size:14px;font-weight:400;line-height:1.4;resize:vertical}
+.trace-rpt-itembar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.trace-rpt-kind{display:inline-flex;border:1px solid #56656e;border-radius:6px;overflow:hidden}
+.trace-rpt-kind button{background:transparent;color:#c9d5db;border:0;padding:4px 10px;font-size:12px;cursor:pointer}
+.trace-rpt-kind button.on{background:#c7a458;color:#10161a;font-weight:700}
+.trace-rpt-item label.trace-rpt-include{display:inline-flex;flex-direction:row;align-items:center;gap:6px;margin:0;width:auto;white-space:nowrap;font-size:12px;font-weight:500;color:#d8e1e7}
+.trace-rpt-item label.trace-rpt-include input{width:auto;margin:0}
+.trace-rpt-tag{font-size:11px;color:#c7a458;font-weight:600}
+.trace-rpt-tools{margin-left:auto;display:flex;gap:6px}
+.trace-rpt-tools button{padding:3px 9px;font-size:12px}
 `;
   document.head.appendChild(css);
 
