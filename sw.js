@@ -6,7 +6,7 @@
  * soon as it notices one. Requests to other sites (the Supabase database)
  * are never cached here.
  */
-const CACHE = "trace-app-v1";
+const CACHE = "trace-app-v2";
 const APP_FILES = [
   "./index.html",
   "./manifest.webmanifest",
@@ -38,6 +38,10 @@ const APP_FILES = [
   "./js/teo-import.js",
   "./js/evaluation-flow.js",
   "./js/aar-print.js",
+  "./js/reports.js",
+  "./js/vendor/jszip-3.10.1.min.js",
+  "./templates/exsum-template.docx",
+  "./templates/faar-template.pptx",
   "./js/backup-guard.js",
 ];
 const PAGE = new URL("./index.html", self.registration.scope).href;
