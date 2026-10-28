@@ -17,6 +17,7 @@
     "js/teo-import.js",
     "js/evaluation-flow.js",
     "js/aar-print.js",
+    "js/reports.js",
     "js/backup-guard.js",
   ];
 
