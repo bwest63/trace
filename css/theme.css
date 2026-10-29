@@ -83,6 +83,10 @@ body {
   color: #89939a;
   border-top: 1px solid #2b3439;
 }
+.sidebar-footer:empty {
+  padding: 0;
+  border-top: 0;
+}
 main {
   max-width: none;
   margin: 0;

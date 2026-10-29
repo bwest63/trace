@@ -671,7 +671,7 @@ const TraceSync = (function () {
     return new Promise((resolve) => {
       const shade = authCard(`
         <h1 data-title>Sign in</h1>
-        <p class="trace-auth-sub">Shared OC/T workspace · Fictional demonstration data only</p>
+        <p class="trace-auth-sub">Shared OC/T workspace</p>
         <label data-only="signup" hidden>Name or OC/T call sign<input name="name" autocomplete="name" maxlength="80"></label>
         <label>Email<input name="email" type="email" autocomplete="username" required></label>
         <label data-only="signin signup">Password<input name="password" type="password" autocomplete="current-password" minlength="8" required></label>
@@ -983,11 +983,7 @@ const TraceSync = (function () {
     const footer = document.querySelector("main > footer");
     if (footer)
       footer.textContent =
-        "TRACE v42 · Shared demonstration · Synced through Supabase · Fictional data only · No official Army connection";
-    const sideFooter = document.querySelector(".sidebar-footer");
-    if (sideFooter)
-      sideFooter.textContent =
-        "Prototype only · Public T&EO references · Fictional evaluation data · Shared with signed-in OC/Ts";
+        "TRACE v42";
 
     const header = document.querySelector(".app-header .header-right");
     if (header) {
