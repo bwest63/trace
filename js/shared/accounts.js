@@ -13,6 +13,8 @@
   let inviteOnly = false;
   let approvalRequired = false;
   let outdated = false;
+  // People search, filter and sort; kept across redraws after each change.
+  const find = { q: "", show: "all", sort: "name" };
 
   const navList = document.querySelector(".sidebar nav");
   const navButton = document.createElement("button");
@@ -149,11 +151,95 @@
       </section>
       <section class="panel">
         <div class="section-head"><h2>People (${members.length})</h2><span>${active} active · ${admins} admin${admins === 1 ? "" : "s"}</span></div>
-        <div class="trace-acct-list">${members.map(personRow).join("")}</div>
+        <div class="trace-acct-find" role="search">
+          <label>Search people<input type="search" id="acctFind" placeholder="Name or email" autocomplete="off" value="${esc(find.q)}"></label>
+          <label>Show<select id="acctShow">
+            <option value="all">Everyone</option>
+            <option value="admin">Admins</option>
+            <option value="oct">OC/Ts</option>
+            <option value="off">Access off</option>
+            <option value="never">Never signed in</option>
+          </select></label>
+          <label>Sort by<select id="acctSort">
+            <option value="name">Name (A–Z)</option>
+            <option value="recent">Last sign-in</option>
+            <option value="joined">Newest first</option>
+          </select></label>
+        </div>
+        <p class="hint trace-acct-count" id="acctCount" role="status"></p>
+        <div class="trace-acct-list" id="acctPeople">${members.map(personRow).join("")}</div>
+        <p class="hint" id="acctNoMatch" hidden>No one matches. Try part of a name or email, or set Show to Everyone.</p>
         <p class="hint">Turning off access hides all TRACE data from that person and stops them saving; their earlier records stay. To delete an account permanently, use Supabase → Authentication → Users.</p>
       </section>
     </div>`;
     bind();
+    bindFind();
+  }
+
+  // Shows only the people who match the search and Show filter, in the chosen order.
+  // Rows are moved and hidden rather than redrawn, so their buttons keep working.
+  function applyFind() {
+    const list = $("acctPeople");
+    if (!list) return;
+    const byId = new Map(people.map((p) => [p.id, p]));
+    const terms = find.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const time = (iso) => (iso ? Date.parse(iso) : 0);
+    const name = (p) => (p.display_name || "").trim();
+    const byName = (a, b) =>
+      name(a).localeCompare(name(b), undefined, { sensitivity: "base" }) ||
+      (a.email || "").localeCompare(b.email || "");
+    const order = {
+      name: byName,
+      recent: (a, b) =>
+        time(b.last_sign_in_at) - time(a.last_sign_in_at) || byName(a, b),
+      joined: (a, b) => time(b.created_at) - time(a.created_at) || byName(a, b),
+    }[find.sort];
+    const fits = {
+      all: () => true,
+      admin: (p) => p.role === "admin",
+      oct: (p) => p.role !== "admin",
+      off: (p) => !p.active,
+      never: (p) => !p.last_sign_in_at,
+    }[find.show];
+    const rows = [...list.querySelectorAll(".trace-acct-row[data-person]")]
+      .map((row) => ({ row, p: byId.get(row.dataset.person) }))
+      .filter((r) => r.p);
+    rows.sort((a, b) => order(a.p, b.p));
+    let shown = 0;
+    for (const { row, p } of rows) {
+      const text = `${p.display_name || ""} ${p.email || ""}`.toLowerCase();
+      const match = fits(p) && terms.every((t) => text.includes(t));
+      row.hidden = !match;
+      if (match) shown++;
+      list.appendChild(row);
+    }
+    const filtered = terms.length > 0 || find.show !== "all";
+    $("acctCount").textContent = filtered
+      ? `Showing ${shown} of ${rows.length}`
+      : "";
+    $("acctNoMatch").hidden = shown > 0 || rows.length === 0;
+  }
+
+  function bindFind() {
+    const input = $("acctFind"),
+      show = $("acctShow"),
+      sort = $("acctSort");
+    if (!input) return;
+    show.value = find.show;
+    sort.value = find.sort;
+    input.oninput = () => {
+      find.q = input.value;
+      applyFind();
+    };
+    show.onchange = () => {
+      find.show = show.value;
+      applyFind();
+    };
+    sort.onchange = () => {
+      find.sort = sort.value;
+      applyFind();
+    };
+    applyFind();
   }
 
   function waitingRow(p) {
@@ -173,7 +259,7 @@
 
   function personRow(p) {
     const self = p.id === TraceSync.userId;
-    return `<div class="trace-acct-row ${p.active ? "" : "off"}">
+    return `<div class="trace-acct-row ${p.active ? "" : "off"}" data-person="${esc(p.id)}">
       <div class="trace-acct-who"><strong>${esc(p.display_name || "Unnamed")}${self ? ' <em class="trace-acct-you">You</em>' : ""}</strong><small>${esc(p.email || "")}</small></div>
       <div class="trace-acct-meta">
         <span class="trace-acct-badge ${p.role}">${p.role === "admin" ? "Admin" : "OC/T"}</span>
