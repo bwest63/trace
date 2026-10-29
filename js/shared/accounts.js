@@ -17,7 +17,7 @@
   const navList = document.querySelector(".sidebar nav");
   const navButton = document.createElement("button");
   navButton.dataset.nav = "accounts";
-  navButton.innerHTML = `${TRACE_MARK}<span>Accounts</span><em class="trace-nav-badge" hidden></em>`;
+  navButton.innerHTML = `${TRACE_NAV_ICONS.accounts}<span>Accounts</span><em class="trace-nav-badge" hidden></em>`;
   navButton.onclick = () => nav("accounts");
   navList?.appendChild(navButton);
 

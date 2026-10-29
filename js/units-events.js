@@ -309,7 +309,7 @@ function renderUnitEventManager() {
   const archived = (mode === "units" ? trace18.units : trace18.events).filter(
     (x) => x.archived,
   );
-  root.innerHTML = `<div class="trace18-page"><div class="trace18-top"><div><h2>Units & Events</h2><p>Manage organizations and training events in one place.</p></div><button class="primary" id="t18add">＋ ${mode === "units" ? "Add Unit" : "Create Event"}</button></div><div class="trace18-tabs"><button data-t18mode="units" class="${mode === "units" ? "selected" : ""}">Units <span>${trace18.units.filter((x) => !x.archived).length}</span></button><button data-t18mode="events" class="${mode === "events" ? "selected" : ""}">Training Events <span>${trace18.events.filter((x) => !x.archived).length}</span></button></div><div class="trace18-list">${
+  root.innerHTML = `<div class="trace18-page"><div class="trace18-top"><div><p>Manage organizations and training events in one place.</p></div><button class="primary" id="t18add">＋ ${mode === "units" ? "Add Unit" : "Create Event"}</button></div><div class="trace18-tabs"><button data-t18mode="units" class="${mode === "units" ? "selected" : ""}">Units <span>${trace18.units.filter((x) => !x.archived).length}</span></button><button data-t18mode="events" class="${mode === "events" ? "selected" : ""}">Training Events <span>${trace18.events.filter((x) => !x.archived).length}</span></button></div><div class="trace18-list">${
     mode === "units"
       ? trace18.units
           .filter((x) => !x.archived)
