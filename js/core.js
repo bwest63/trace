@@ -27,6 +27,10 @@ function traceCanEdit(r) {
   return !sync?.shared || !r.createdBy || r.createdBy === sync.userId || sync.isAdmin;
 }
 // The "A" from the TRACE wordmark, used as the app's single icon.
+const TRACE_NAV_ICONS = {
+  accounts:
+    '<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></svg>',
+};
 const TRACE_MARK =
   '<svg class="trace-a-mark" viewBox="0 0 24 20" aria-hidden="true" focusable="false"><path d="M12 1 23 19h-4.6L12 8.3 5.6 19H1z"/><path d="M12 12.6 15 19H9z"/></svg>';
 const $ = (id) => document.getElementById(id);
@@ -104,6 +108,7 @@ function nav(tab) {
   )
     traceRestoreEvaluation();
   state.tab = tab;
+  document.body.dataset.tab = tab;
   document
     .querySelectorAll("[data-nav]")
     .forEach((b) => b.classList.toggle("active", b.dataset.nav === tab));

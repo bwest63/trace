@@ -16,6 +16,7 @@ const APP_FILES = [
   "./css/teo-import.css",
   "./css/v42.css",
   "./css/shared.css",
+  "./css/polish.css",
   "./img/trace-logo.png",
   "./img/first-army.png",
   "./img/icons/apple-touch-icon.png",

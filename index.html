@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="css/teo-import.css" />
     <link rel="stylesheet" href="css/v42.css" />
     <link rel="stylesheet" href="css/shared.css" />
+    <link rel="stylesheet" href="css/polish.css" />
   </head>
   <body>
     <div class="shell">
@@ -36,76 +37,13 @@
         </div>
         <div class="side-note">TRAINING ASSESSMENT PLATFORM</div>
         <nav>
-          <button data-nav="dashboard">
-            <svg
-              class="trace-a-mark"
-              viewBox="0 0 24 20"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M12 1 23 19h-4.6L12 8.3 5.6 19H1z" />
-              <path d="M12 12.6 15 19H9z" /></svg
-            ><span>Dashboard</span></button
-          ><button data-nav="evaluate" class="active">
-            <svg
-              class="trace-a-mark"
-              viewBox="0 0 24 20"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M12 1 23 19h-4.6L12 8.3 5.6 19H1z" />
-              <path d="M12 12.6 15 19H9z" /></svg
-            ><span>Evaluations</span></button
-          ><button data-nav="units-events">
-            <svg
-              class="trace-a-mark"
-              viewBox="0 0 24 20"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M12 1 23 19h-4.6L12 8.3 5.6 19H1z" />
-              <path d="M12 12.6 15 19H9z" /></svg
-            ><span>Units &amp; Events</span></button
-          ><button data-nav="history">
-            <svg
-              class="trace-a-mark"
-              viewBox="0 0 24 20"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M12 1 23 19h-4.6L12 8.3 5.6 19H1z" />
-              <path d="M12 12.6 15 19H9z" /></svg
-            ><span>Unit History</span></button
-          ><button data-nav="standards">
-            <svg
-              class="trace-a-mark"
-              viewBox="0 0 24 20"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M12 1 23 19h-4.6L12 8.3 5.6 19H1z" />
-              <path d="M12 12.6 15 19H9z" /></svg
-            ><span>T&EO Library</span></button
-          ><button data-nav="aar">
-            <svg
-              class="trace-a-mark"
-              viewBox="0 0 24 20"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M12 1 23 19h-4.6L12 8.3 5.6 19H1z" />
-              <path d="M12 12.6 15 19H9z" /></svg
-            ><span>AAR & Reports</span></button
-          ><button data-nav="workspace">
-            <svg
-              class="trace-a-mark"
-              viewBox="0 0 24 20"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M12 1 23 19h-4.6L12 8.3 5.6 19H1z" />
-              <path d="M12 12.6 15 19H9z" /></svg
-            ><span>OC/T Workspace</span>
+          <button data-nav="dashboard"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></button
+          ><button data-nav="evaluate" class="active"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg><span>Evaluations</span></button
+          ><button data-nav="units-events"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 22V3"/><path d="M5 4h13l-2.5 4.5L18 13H5"/></svg><span>Units &amp; Events</span></button
+          ><button data-nav="history"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg><span>Unit History</span></button
+          ><button data-nav="standards"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg><span>T&EO Library</span></button
+          ><button data-nav="aar"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg><span>AAR & Reports</span></button
+          ><button data-nav="workspace"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L13 14l-4 1 1-4z"/></svg><span>OC/T Workspace</span>
           </button>
         </nav>
         <p class="sidebar-footer"></p>
@@ -113,11 +51,7 @@
       <main>
         <header class="app-header">
           <div class="header-text">
-            <div class="header-eyebrow">
-              TRACE <span>›</span> TRAINING OPERATIONS
-            </div>
             <h1 id="heading">Readiness Dashboard</h1>
-            <p>Training Readiness Assessment &amp; Coaching Environment</p>
           </div>
           <div class="header-right">
             <img

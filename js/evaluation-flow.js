@@ -88,7 +88,9 @@
       const progress = $("progress");
       if (progress) progress.textContent = "";
       const preview = $("ratingPreview");
-      if (preview) preview.innerHTML = "";
+      if (preview)
+        preview.textContent =
+          "Select a collective training task to see its performance measures.";
       const rating = $("rating");
       if (rating) {
         rating.value = "";

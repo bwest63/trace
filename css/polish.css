@@ -1,0 +1,154 @@
+/* TRACE visual polish: loaded last so it settles earlier layers.
+ *
+ * - One accent (gold) for active and hover states instead of blue + gold.
+ * - Distinct line icons in the sidebar.
+ * - Slimmer page header; Print shows only on the dashboard.
+ * - Regular-weight text inside form fields.
+ * - Compact badges in the T&EO Library.
+ * - Phones: backup and install buttons move below the page, slimmer header.
+ */
+
+:root {
+  --trace-gold: #d6b45b;
+  --trace-gold-ink: #f2d07d;
+  --trace-gold-wash: linear-gradient(90deg, #3c3420aa, #202427);
+  --trace-gold-hover: #2a261b;
+}
+
+/* ---------- Sidebar navigation ---------- */
+.sidebar nav button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: #7d8a92;
+  transition: color 0.15s;
+}
+.sidebar nav button.active .nav-icon,
+.sidebar nav button:hover .nav-icon {
+  color: var(--trace-gold);
+}
+.sidebar nav button.active,
+nav button.active {
+  background: var(--trace-gold-wash) !important;
+  border-left-color: #d5ac51;
+  color: var(--trace-gold-ink) !important;
+}
+
+/* Secondary sidebar buttons: gold hover instead of blue. */
+.trace42-backup button:hover,
+.trace-account button:hover,
+.trace-install button:hover {
+  background: var(--trace-gold-hover);
+  border-color: #6b5a33;
+  color: #fff;
+}
+
+/* ---------- Page header ---------- */
+.app-header {
+  padding: 14px 20px;
+  align-items: center;
+}
+.app-header h1 {
+  margin: 0;
+}
+.app-header .first-army-logo {
+  height: 40px;
+  width: auto;
+}
+/* Print belongs to the dashboard only. */
+body:not([data-tab="dashboard"]) #trace32Print {
+  display: none;
+}
+
+/* ---------- Forms ---------- */
+input,
+select,
+textarea {
+  font-weight: 400;
+}
+
+/* ---------- T&EO Library ---------- */
+.trace23-imported > .pill {
+  flex: none;
+  padding: 4px 10px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* Prompt shown in place of measures before a task is picked. */
+#ratingPreview:not(:empty) {
+  color: #aab4bb;
+  font-size: 13px;
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 850px) {
+  /* Let the sidebar's pieces join the page flow so the backup and install
+     buttons can sit under the content instead of above it. */
+  .shell {
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar {
+    display: contents;
+  }
+  .sidebar > .brand {
+    order: 0;
+    padding: 16px 16px 0;
+    border-bottom: 0;
+  }
+  .sidebar > nav {
+    order: 1;
+    margin: 12px 0 0;
+    padding: 0 16px 12px;
+    border-bottom: 1px solid #293239;
+  }
+  main {
+    order: 2;
+  }
+  .sidebar > .trace42-backup,
+  .sidebar > .trace-install,
+  .sidebar > .trace-account {
+    order: 3;
+    margin: 0 15px 12px;
+  }
+  .sidebar > .trace42-backup {
+    margin-bottom: 24px;
+  }
+  .sidebar nav button {
+    gap: 8px;
+  }
+  .app-header {
+    padding: 12px 14px;
+    flex-wrap: nowrap;
+    flex-direction: row;
+  }
+  .app-header h1 {
+    font-size: 21px;
+  }
+  .app-header .header-right {
+    gap: 10px;
+    flex-wrap: nowrap;
+  }
+  .app-header .first-army-logo {
+    height: 32px;
+  }
+  #trace32Print {
+    padding: 8px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .app-header .header-text {
+    min-width: 0;
+  }
+}
