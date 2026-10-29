@@ -233,6 +233,20 @@
 .trace-acct-row.off {
   opacity: 0.65;
 }
+.trace-acct-row[hidden] {
+  display: none;
+}
+.trace-acct-find {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px 170px;
+  gap: 12px;
+  align-items: end;
+  margin: 4px 0 6px;
+}
+.trace-acct-count {
+  min-height: 1em;
+  margin: 6px 0 0;
+}
 .trace-acct-who strong {
   display: block;
   color: #eef2f4;
@@ -322,6 +336,12 @@
   .trace-acct-row,
   .trace-acct-invite {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .trace-acct-find {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .trace-acct-find > label:first-child {
+    grid-column: 1 / -1;
   }
   .trace-acct-actions {
     justify-content: flex-start;
