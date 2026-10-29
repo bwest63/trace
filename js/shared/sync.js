@@ -978,7 +978,7 @@ const TraceSync = (function () {
       warning.setAttribute("role", "alert");
       warning.innerHTML =
         "<strong>TRACE's database needs an update.</strong> In Supabase, open <strong>SQL Editor</strong>, paste the latest <code>supabase/schema.sql</code> from the trace repository, and click <strong>Run</strong>. Until then, admin approval for new accounts is not enforced. (Only admins see this.)";
-      document.querySelector("main .notice")?.after(warning);
+      document.getElementById("content")?.before(warning);
     }
     const footer = document.querySelector("main > footer");
     if (footer)
