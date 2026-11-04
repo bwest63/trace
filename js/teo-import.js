@@ -144,6 +144,21 @@ function trace23Clean(line) {
     .replace(/\s+/g, " ")
     .trim();
 }
+// Remove page footers and classification banners that PDF text extraction mixes into step lines.
+function trace23StripFurniture(line) {
+  return trace23Clean(
+    String(line || "")
+      .replace(
+        /(?:^|\s)(?:UNCLASSIFIED|CUI)(?:\s*\/\/\s*(?!FOR OFFICIAL)[A-Z0-9-]+)*(?:\s*\/\/\s*FOR OFFICIAL USE ONLY)?(?=\s|$)/g,
+        " ",
+      )
+      .replace(/\bFOR OFFICIAL USE ONLY\b/g, " ")
+      .replace(/^\s*Page\s+\d+(?:\s+of\s+\d+)?(?=\s|$)/, " ")
+      .replace(/\s+Page\s+\d+(?:\s+of\s+\d+)?\s*$/, " ")
+      // Repeated table header on each page.
+      .replace(/STEP\s*\/\s*MEASURE\s+GO\s+NO-?\s*GO(?:\s+N\/A)?/gi, " "),
+  );
+}
 function trace23Parse(pages, name) {
   const heading = /performance\s+steps\s+and\s+measures/i;
   const endHeading = /task\s+performance\s+summary\s+block/i;
@@ -175,16 +190,44 @@ function trace23Parse(pages, name) {
   const steps = [];
   let current = null;
   let stage = "";
+  let lastNum = 0;
+  let inNote = false;
+  let done = false;
+  // The words "performance steps and measures" also appear in the task's
+  // Standard/preamble text, so the real table starts at the STEP/MEASURE
+  // GO NO-GO header. Fall back to the heading when a export has no header.
+  const tableHeader = /STEP\s*\/\s*MEASURE\s+GO\s+NO-?\s*GO/i;
+  let started = !chunks.some((c) => tableHeader.test(c.text));
+  // Sections that follow the steps table in Army T&EOs.
+  const trailer =
+    /^(?:mission\(s\)\s+supported|mopp\s*4\s*(?:statement)?\s*:|nvg\s*(?:statement)?\s*:|prerequisite\s+(?:collective|individual)\s+task|supporting\s+(?:collective|individual)\s+task|supporting\s+drill|opfor\s+task|task\s+performance\s+(?:and\s+evaluation\s+)?summary\s+block)/i;
   function flush() {
     if (current) {
       current.text = trace23Clean(current.text);
+      current.subtasks = current.subtasks.map(trace23Clean);
+      current.details = current.details.map(trace23Clean);
       if (current.text) steps.push(current);
       current = null;
     }
   }
   for (const chunk of chunks) {
-    const lines = chunk.text.split(/\n/).map(trace23Clean).filter(Boolean);
+    if (done) break;
+    let raw = chunk.text;
+    if (!started) {
+      const h = tableHeader.exec(raw);
+      if (!h) continue;
+      raw = raw.slice(h.index);
+      started = true;
+    }
+    const lines = raw
+      .split(/\n/)
+      .map(trace23StripFurniture)
+      .filter(Boolean);
     for (let line of lines) {
+      if (trailer.test(line)) {
+        done = true;
+        break;
+      }
       if (
         /^(?:performance\s+steps\s+and\s+measures|performance\s+steps|step\s+no\.?|go\s*\/\s*no.?go|evaluation\s+guidance|legend\s*:)/i.test(
           line,
@@ -204,10 +247,17 @@ function trace23Parse(pages, name) {
       );
       if (!m)
         m = line.match(/^\s*((?:\*|\+){1,2})\s*(\d{1,3})\s*[.)]?\s+(.+)$/);
+      // Only treat a numbered line as a new step when the number follows the
+      // previous one (small gaps allowed). Stray numbered lines in prose are
+      // continuation text, not new steps.
+      const candidate = m ? Number(/^\d/.test(m[1]) ? m[1] : m[2]) : 0;
+      if (m && !(candidate > lastNum && candidate <= lastNum + 3)) m = null;
       if (m) {
         flush();
+        inNote = false;
         const prefix = /^\d/.test(m[1]) ? "" : m[1];
         const num = Number(prefix ? m[2] : m[1]);
+        lastNum = num;
         let body = prefix ? m[3] : m[3];
         let flags = prefix || m[2] || "";
         const suffix = body.match(
@@ -238,15 +288,23 @@ function trace23Parse(pages, name) {
       }
       if (!current) continue;
       // Subtasks are retained and displayed as supporting details, not counted as separate numbered steps.
-      if (/^(?:\(?[a-z]\)|[a-z][.)]|\(\d+\))\s+\S/i.test(line)) {
+      // Subtasks may carry their own leader/critical markers ("+* e.", "* d.").
+      if (
+        /^(?:[*+]{1,2}\s*)?(?:\(?[a-z]\)|[a-z][.)]|\(\d+\)|_\d+_)\s+\S/i.test(
+          line,
+        )
+      ) {
+        inNote = false;
         current.subtasks.push(line);
         current.details.push(line);
         continue;
       }
-      if (
-        /^(?:note|legend|performance\s+measures|task\s+steps)\s*:/i.test(line)
-      )
+      // Notes are dropped, including the lines that wrap onto the next row.
+      if (/^(?:note|legend|performance\s+measures|task\s+steps)\s*:/i.test(line)) {
+        inNote = true;
         continue;
+      }
+      if (inNote) continue;
       if (current.subtasks.length) {
         current.subtasks[current.subtasks.length - 1] += " " + line;
         current.details[current.details.length - 1] += " " + line;
