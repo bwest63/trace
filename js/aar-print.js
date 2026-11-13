@@ -432,15 +432,89 @@ function trace33PrintReport() {
  <div class="section"><h2>Outstanding performance measures (${pending.length})</h2>${pending.length ? `<table><thead><tr><th>T&amp;EO</th><th>Step</th><th>Performance measure</th><th>Status</th></tr></thead><tbody>${pending.map((row) => `<tr>${row.map((v) => `<td>${clean(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>` : '<div class="empty">No outstanding steps displayed.</div>'}</div>
  ${naRows.length ? `<div class="section"><h2>Not applicable exclusions</h2>${naRows.map((x) => `<div class="note">${clean(x)}</div>`).join("")}</div>` : ""}
  <div class="foot">Coverage is documentation coverage (GO and NO-GO observed); N/A excluded from denominator. OC/T readiness predictor is advisory, not an official commander proficiency determination. Prototype: use fictional/approved data only.</div></body></html>`;
-  const win = window.open("", "_blank");
-  if (!win) {
-    alert(
-      "Your browser blocked the print report window. Allow pop-ups for this file and try again.",
-    );
-    return;
+  // Show the report inside TRACE and print from the main page. Print calls made
+  // from a pop-up window are ignored on phones and installed (home-screen) apps.
+  trace33ShowPrintReport(report);
+}
+// Scope the report's stylesheet to the report container so it can't restyle TRACE.
+function trace33ScopeCss(css, scope) {
+  css = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  let out = "",
+    i = 0;
+  while (i < css.length) {
+    const open = css.indexOf("{", i);
+    if (open < 0) break;
+    const head = css.slice(i, open).trim();
+    let depth = 1,
+      j = open + 1;
+    while (j < css.length && depth) {
+      if (css[j] === "{") depth++;
+      else if (css[j] === "}") depth--;
+      j++;
+    }
+    const body = css.slice(open + 1, j - 1);
+    if (/^@media/i.test(head))
+      out += head + "{" + trace33ScopeCss(body, scope) + "}";
+    else if (head.startsWith("@")) out += head + "{" + body + "}";
+    else
+      out +=
+        head
+          .split(",")
+          .map((sel) => {
+            sel = sel.trim();
+            if (sel === "*") return scope + "," + scope + " *";
+            if (/^(html|body|:root)$/i.test(sel)) return scope;
+            return scope + " " + sel.replace(/^(html|body|:root)\s+/i, "");
+          })
+          .join(",") +
+        "{" +
+        body +
+        "}";
+    i = j;
   }
-  win.document.open();
-  win.document.write(report);
-  win.document.close();
-  win.focus();
+  return out;
+}
+function trace33ShowPrintReport(report) {
+  document.getElementById("tracePrintReport")?.remove();
+  document.getElementById("tracePrintReportCss")?.remove();
+  const css = (report.match(/<style>([\s\S]*?)<\/style>/i) || [])[1] || "";
+  let body = (report.match(/<body>([\s\S]*)<\/body>/i) || [])[1] || "";
+  body = body.replace(/<div class="printbar">[\s\S]*?<\/div>/i, "");
+  const scope = "#tracePrintReport";
+  const style = document.createElement("style");
+  style.id = "tracePrintReportCss";
+  style.textContent =
+    // Start from browser defaults so TRACE's own styles don't leak in.
+    `${scope} *{all:revert}` +
+    trace33ScopeCss(css, scope) +
+    `${scope}{position:fixed;inset:0;z-index:2147483000;overflow:auto;-webkit-overflow-scrolling:touch;padding:0 16px 24px;margin:0}` +
+    `${scope} .trp-toolbar{position:sticky;top:0;z-index:1;margin:0 -16px 12px;flex-wrap:wrap}` +
+    `${scope} .trp-toolbar button{border:0;border-radius:6px;padding:9px 14px;cursor:pointer;font:700 13px Arial,Helvetica,sans-serif}` +
+    `${scope} .trp-toolbar button.trp-close{background:#2d3a42!important;color:#e7edf0!important;border:1px solid #55646d}` +
+    `@media print{` +
+    `html,body{height:auto!important;overflow:visible!important;background:#0b1116!important}` +
+    `body>*:not(${scope}){display:none!important}` +
+    `${scope}{position:static!important;overflow:visible!important;padding:0!important;inset:auto!important}` +
+    `${scope} .trp-toolbar{display:none!important}}`;
+  const host = document.createElement("div");
+  host.id = "tracePrintReport";
+  host.setAttribute("role", "dialog");
+  host.setAttribute("aria-label", "TRACE dashboard print report");
+  host.innerHTML =
+    '<div class="printbar trp-toolbar"><button type="button" data-trp="print">Print landscape report</button><button type="button" class="trp-close" data-trp="close">Close</button><span>For the dark TRACE theme, select Landscape and turn on Print backgrounds / Background graphics. On iPhone or iPad, you can also pinch the print preview to save it as a PDF.</span></div>' +
+    body;
+  document.head.appendChild(style);
+  document.body.appendChild(host);
+  const close = () => {
+    host.remove();
+    style.remove();
+    document.removeEventListener("keydown", onKey);
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  document.addEventListener("keydown", onKey);
+  host.querySelector('[data-trp="print"]').onclick = () => window.print();
+  host.querySelector('[data-trp="close"]').onclick = close;
+  host.scrollTop = 0;
 }
