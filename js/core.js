@@ -14,6 +14,12 @@ const units = [
   tasks = TRACE_BUILTIN_TEOS,
   demoHistory = [];
 const KEY = "trace_bsb_standalone_v1";
+// Built-in demonstration T&EOs: kept so older records still display, but hidden
+// from the library and assignment lists so they can't be assigned by mistake.
+const TRACE_REFERENCE_IDS = new Set(TRACE_BUILTIN_TEOS.map((t) => t.id));
+function traceIsReference(t) {
+  return TRACE_REFERENCE_IDS.has(t?.id || t);
+}
 // Tells the shared-mode sync layer (js/shared/sync.js) that a stored data set changed.
 // In local-only mode TraceSync is absent and this does nothing.
 function traceSyncNotify(key) {
@@ -518,7 +524,7 @@ function renderDashboard() {
   );
   window.traceDashboardPending = pending;
   $("content").innerHTML =
-    `<div class="dash-shell"><div class="dash-title"><div><h2>Evaluation Dashboard</h2><p>Performance-step coverage · ${esc(trace18.scope === "all" ? "All Units" : trace18UnitName(trace18.scope))} · ${tasks.length} reference T&EOs</p></div><button class="secondary" id="viewAllPending">View outstanding steps ↗</button></div>
+    `<div class="dash-shell"><div class="dash-title"><div><h2>Evaluation Dashboard</h2><p>Performance-step coverage · ${esc(trace18.scope === "all" ? "All Units" : trace18UnitName(trace18.scope))} · ${tasks.filter((t) => !traceIsReference(t)).length} T&EOs in library</p></div><button class="secondary" id="viewAllPending">View outstanding steps ↗</button></div>
  <div class="kpi-grid">${stat("CRITICAL STEP COVERAGE", critical, "critical", "Critical steps observed")}${stat("LEADER STEP COVERAGE", leader, "leader", "Leader steps observed")}${stat("TOTAL · CRITICAL + LEADER", { done, total }, "all", "Steps observed · each step counted once")}<div class="kpi-card coverage-overview"><div class="kpi-label">COVERAGE BY T&EO</div>${entries
    .map((entry) => {
      const { task, record } = entry,

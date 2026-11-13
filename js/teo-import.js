@@ -577,17 +577,14 @@ renderStandards = function () {
 renderStandards = function () {
   const root = document.getElementById("content");
   const imported = tasks.filter((t) => !trace23BuiltInIds.has(t.id));
-  const builtins = tasks.filter((t) => trace23BuiltInIds.has(t.id));
-  root.innerHTML = `<div class="panel"><div class="section-head"><div><h2>T&EO Library</h2><p class="section-sub">Reference warehouse · Upload, download, and remove T&EOs. Assign tasks to units in Units & Events; record assessments in Evaluations.</p></div><span class="pill">${tasks.length} T&EOs</span></div>
+  root.innerHTML = `<div class="panel"><div class="section-head"><div><h2>T&EO Library</h2><p class="section-sub">Reference warehouse · Upload, download, and remove T&EOs. Assign tasks to units in Units & Events; record assessments in Evaluations.</p></div><span class="pill">${imported.length} T&EOs</span></div>
  <div class="trace23-drop" id="trace23Drop" tabindex="0" role="button" aria-label="Drop a T&EO PDF or choose a file"><strong>↓ Drop T&EO Here</strong><small>Drop PDF / TXT or click to browse your computer</small></div>
  <input type="file" id="trace23File" accept=".pdf,.txt,application/pdf,text/plain" style="display:none">
  <div id="trace23Status" class="trace23-status">PDF imports require internet to load the reader. Extraction runs from “Performance Steps and Measures” up to “Task Performance Summary Block.”</div>
  <div class="trace23-preview" id="trace23Preview" style="display:none"></div>
  <div class="section-head" style="margin-top:24px"><h2>Uploaded T&EOs (${imported.length})</h2></div>
  <div>${imported.map((t) => `<div class="trace23-imported"><span><strong>${esc(t.code)}</strong> — ${esc(t.title)} <small>· ${t.steps.length} performance steps · ${esc(t.source || "Uploaded file")}</small></span><button class="secondary" data-t23-download="${esc(t.id)}">Download</button><button class="danger" data-t23-remove="${esc(t.id)}">Delete</button></div>`).join("") || '<p class="hint">No uploaded T&EOs yet. Use the drop box above to add one.</p>'}</div>
- <div class="section-head" style="margin-top:24px"><h2>Included References (${builtins.length})</h2></div>
- <div>${builtins.map((t) => `<div class="trace23-imported"><span><strong>${esc(t.code)}</strong> — ${esc(t.title)} <small>· ${t.steps.length} performance steps</small></span><span class="pill">Built-in reference</span></div>`).join("")}</div>
- <p class="hint">Included references have no uploaded source file to download. Uploaded documents are stored in this browser. Deleting an uploaded T&EO removes it from the active library but retains historical evaluation records.</p></div>`;
+ <p class="hint">Uploaded documents are stored in this browser. Deleting an uploaded T&EO removes it from the active library but retains historical evaluation records.</p></div>`;
   const drop = document.getElementById("trace23Drop"),
     input = document.getElementById("trace23File");
   drop.onclick = () => input.click();
