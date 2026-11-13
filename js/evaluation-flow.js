@@ -113,5 +113,38 @@
           ? "Select a collective training task to display its performance measures."
           : `${eligible.length} assigned T&EO(s) available for this unit and event.`;
     task.parentElement.appendChild(hint);
+    // Older imports only rated numbered steps; offer to read the substep boxes.
+    const chosenTask = tasks.find((t) => t.id === chosen);
+    if (
+      chosen &&
+      typeof trace23NeedsBoxScan === "function" &&
+      trace23NeedsBoxScan(chosenTask)
+    ) {
+      const firstMeasure = panel.querySelector(".measure[data-step-index]");
+      const bar = document.createElement("div");
+      bar.className = "alert-info trace-boxscan";
+      bar.innerHTML =
+        '<span>This T&EO was imported before TRACE read the substep rating boxes. Scan its source PDF to rate each boxed substep (e.g., 1e, 2d(4)) separately.</span><button type="button" class="secondary">Scan source PDF</button>';
+      const btn = bar.querySelector("button");
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = "Scanning…";
+        try {
+          const n = await trace23RescanBoxes(chosen);
+          // Keep any unsaved ratings on screen while redrawing.
+          renderEvaluate();
+          const f = $("feedback");
+          if (f) {
+            f.style.color = "#79cfa0";
+            f.textContent = `Found ${n} substeps with rating boxes.`;
+          }
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = "Scan source PDF";
+          bar.querySelector("span").textContent = e.message;
+        }
+      };
+      if (firstMeasure) firstMeasure.before(bar);
+    }
   };
 })();

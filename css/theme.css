@@ -1412,3 +1412,57 @@ footer {
     box-shadow: none !important;
   }
 }
+
+/* Substeps that carry their own GO / NO-GO / N/A boxes on the T&EO. */
+.trace-subchecks {
+  margin: 4px 0 14px;
+  border-left: 2px solid #39464d;
+  padding-left: 12px;
+}
+.trace-subchecks-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: #c9d4da;
+  margin-bottom: 6px;
+}
+.trace-subchecks-head small {
+  font-weight: 400;
+  color: #8fa0a9;
+  margin-left: 6px;
+}
+.trace-subcheck {
+  padding: 8px 0;
+  border-top: 1px solid #2c373d;
+}
+.trace-subcheck-text {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #dbe3e7;
+}
+.trace-subcheck .rating-row {
+  margin: 8px 0 2px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.trace-subcheck .choice {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+.trace-flag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #e8c56f;
+  white-space: nowrap;
+}
+.trace-boxscan {
+  margin: 12px 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.trace-flag-via {
+  font-size: 10px;
+  color: #8fa0a9;
+}
