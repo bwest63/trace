@@ -159,9 +159,6 @@ function trace23StripFurniture(line) {
       .replace(/STEP\s*\/\s*MEASURE\s+GO\s+NO-?\s*GO(?:\s+N\/A)?/gi, " "),
   );
 }
-// Substep marker with optional leader/critical flags: "+* e.", "(4)", "(a)", "_1_".
-const TRACE23_SUB_MARKER =
-  /^\s*([*+]{1,2})?\s*(?:([a-z])[.)]|\((\d+)\)|\(([a-z]{1,4})\)|_(\d+)_)\s+/i;
 function trace23Parse(pages, name) {
   const heading = /performance\s+steps\s+and\s+measures/i;
   const endHeading = /task\s+performance\s+summary\s+block/i;
@@ -204,29 +201,11 @@ function trace23Parse(pages, name) {
   // Sections that follow the steps table in Army T&EOs.
   const trailer =
     /^(?:mission\(s\)\s+supported|mopp\s*4\s*(?:statement)?\s*:|nvg\s*(?:statement)?\s*:|prerequisite\s+(?:collective|individual)\s+task|supporting\s+(?:collective|individual)\s+task|supporting\s+drill|opfor\s+task|task\s+performance\s+(?:and\s+evaluation\s+)?summary\s+block)/i;
-  // Whether the source marked any rating boxes (PDFs do; text exports don't).
-  let boxScan = false;
-  // Outline position of the current substep: a. → (1) → (a) → _1_
-  let path = [];
   function flush() {
     if (current) {
       current.text = trace23Clean(current.text);
       current.subtasks = current.subtasks.map(trace23Clean);
       current.details = current.details.map(trace23Clean);
-      const used = new Set();
-      current.checks = current.checks.map((c) => {
-        let key = c.label;
-        for (let n = 2; used.has(key); n++) key = c.label + "#" + n;
-        used.add(key);
-        const full = current.subtasks[c.sub] || "";
-        return {
-          key,
-          label: c.label,
-          text: trace23Clean(full.replace(TRACE23_SUB_MARKER, "")),
-          critical: c.critical,
-          leader: c.leader,
-        };
-      });
       if (current.text) steps.push(current);
       current = null;
     }
@@ -245,13 +224,6 @@ function trace23Parse(pages, name) {
       .map(trace23StripFurniture)
       .filter(Boolean);
     for (let line of lines) {
-      let boxed = false;
-      if (line.startsWith(TRACE_BOX_MARK.trim())) {
-        boxed = true;
-        boxScan = true;
-        line = trace23Clean(line.slice(TRACE_BOX_MARK.trim().length));
-        if (!line) continue;
-      }
       if (trailer.test(line)) {
         done = true;
         break;
@@ -311,10 +283,7 @@ function trace23Parse(pages, name) {
           page: chunk.page,
           critical: /\+|\(C\)|\(CL\)|\(LC\)|critical/i.test(flags),
           leader: /\*|\(L\)|\(CL\)|\(LC\)|leader/i.test(flags),
-          boxed,
-          checks: [],
         };
-        path = [];
         continue;
       }
       if (!current) continue;
@@ -328,30 +297,6 @@ function trace23Parse(pages, name) {
         inNote = false;
         current.subtasks.push(line);
         current.details.push(line);
-        const mk = line.match(TRACE23_SUB_MARKER);
-        if (mk) {
-          const level = mk[2] ? 0 : mk[3] ? 1 : mk[4] ? 2 : mk[5] ? 3 : -1;
-          const part = mk[2]
-            ? mk[2].toLowerCase()
-            : mk[3]
-              ? "(" + mk[3] + ")"
-              : mk[4]
-                ? "(" + mk[4].toLowerCase() + ")"
-                : mk[5]
-                  ? "_" + mk[5] + "_"
-                  : "";
-          if (level >= 0) {
-            path = path.slice(0, level);
-            path[level] = part;
-          }
-          if (boxed)
-            current.checks.push({
-              label: path.filter(Boolean).join("") || part,
-              sub: current.subtasks.length - 1,
-              critical: /\+/.test(mk[1] || ""),
-              leader: /\*/.test(mk[1] || ""),
-            });
-        }
         continue;
       }
       // Notes are dropped, including the lines that wrap onto the next row.
@@ -390,7 +335,6 @@ function trace23Parse(pages, name) {
         .replace(/[)_]/g, " ")
         .trim() || code,
     steps: unique,
-    boxScan,
     traceSymbolMapping: "leader-star-critical-plus",
     page: start + 1,
     endPage: chunks[chunks.length - 1].page,
@@ -422,109 +366,6 @@ function trace23PdfLib() {
   });
   return trace23PdfPromise;
 }
-// Marks a text row that has GO / NO-GO / N/A rating boxes beside it on the T&EO.
-const TRACE_BOX_MARK = "BOX ";
-// Rectangles drawn on a page, in PDF user space. Handles both the pdf.js 3.x/4.x
-// constructPath format ([ops], coords) and the 5.x+ format (paint op, [path data]).
-function trace23PageRects(opList, OPS) {
-  const rects = [];
-  const stack = [];
-  let ctm = [1, 0, 0, 1, 0, 0];
-  const mul = (a, b) => [
-    a[0] * b[0] + a[2] * b[1],
-    a[1] * b[0] + a[3] * b[1],
-    a[0] * b[2] + a[2] * b[3],
-    a[1] * b[2] + a[3] * b[3],
-    a[0] * b[4] + a[2] * b[5] + a[4],
-    a[1] * b[4] + a[3] * b[5] + a[5],
-  ];
-  const pt = (x, y) => [
-    ctm[0] * x + ctm[2] * y + ctm[4],
-    ctm[1] * x + ctm[3] * y + ctm[5],
-  ];
-  const push = (xs, ys) => {
-    if (xs.length < 2) return;
-    rects.push({
-      x0: Math.min(...xs),
-      x1: Math.max(...xs),
-      y0: Math.min(...ys),
-      y1: Math.max(...ys),
-    });
-  };
-  for (let i = 0; i < opList.fnArray.length; i++) {
-    const fn = opList.fnArray[i],
-      a = opList.argsArray[i];
-    if (fn === OPS.save) stack.push(ctm.slice());
-    else if (fn === OPS.restore) ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
-    else if (fn === OPS.transform && a) ctm = mul(ctm, a);
-    else if (fn === OPS.constructPath && a) {
-      if (Array.isArray(a[0])) {
-        // pdf.js 3.x / 4.x
-        const c = a[1] || [];
-        let k = 0;
-        for (const op of a[0]) {
-          if (op === OPS.rectangle) {
-            const [x, y, w, h] = c.slice(k, k + 4);
-            const p1 = pt(x, y),
-              p2 = pt(x + w, y + h);
-            push([p1[0], p2[0]], [p1[1], p2[1]]);
-            k += 4;
-          } else if (op === OPS.moveTo || op === OPS.lineTo) k += 2;
-          else if (op === OPS.curveTo) k += 6;
-          else if (op === OPS.curveTo2 || op === OPS.curveTo3) k += 4;
-        }
-      } else if (Array.isArray(a[1])) {
-        // pdf.js 5.x+: one array of drawing commands per path.
-        for (const data of a[1]) {
-          if (!data) continue;
-          let xs = [],
-            ys = [];
-          for (let k = 0; k < data.length; ) {
-            const op = data[k++];
-            const n = op === 0 || op === 1 ? 2 : op === 2 ? 6 : op === 3 ? 4 : 0;
-            if (op === 0 && xs.length) {
-              push(xs, ys);
-              xs = [];
-              ys = [];
-            }
-            for (let j = 0; j < n; j += 2) {
-              const p = pt(data[k + j], data[k + j + 1]);
-              xs.push(p[0]);
-              ys.push(p[1]);
-            }
-            k += n;
-          }
-          push(xs, ys);
-        }
-      }
-    }
-  }
-  return rects;
-}
-// Rows of rating boxes: two or more side-by-side cells on the right half of the page.
-function trace23BoxRows(rects, pageWidth) {
-  const cells = rects.filter(
-    (r) =>
-      r.x0 > pageWidth * 0.5 &&
-      r.x1 - r.x0 >= 15 &&
-      r.x1 - r.x0 <= 140 &&
-      r.y1 - r.y0 >= 6 &&
-      r.y1 - r.y0 <= 120,
-  );
-  const groups = new Map();
-  cells.forEach((r) => {
-    const key = Math.round(r.y0) + ":" + Math.round(r.y1);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(r);
-  });
-  return [...groups.values()]
-    .filter((g) => g.length >= 2)
-    .map((g) => ({
-      y0: g[0].y0,
-      y1: g[0].y1,
-      x0: Math.min(...g.map((r) => r.x0)),
-    }));
-}
 async function trace23Pages(file) {
   if (/\.txt$/i.test(file.name))
     return (await file.text()).split(/\f|\n\s*---\s*page\s*\d+\s*---\s*\n/i);
@@ -543,50 +384,22 @@ async function trace23Pages(file) {
     let rows = [],
       lastY = null,
       line = [];
-    // Each row keeps the position of its first piece of text so it can be
-    // matched to the rating boxes drawn beside it.
-    let pos = null;
-    const end = () => {
-      if (line.length) rows.push({ text: line.join(" "), ...(pos || {}) });
-      line = [];
-      pos = null;
-    };
     for (const item of content.items) {
       const y = Math.round(item.transform?.[5] || 0);
-      if (lastY !== null && Math.abs(y - lastY) > 3) end();
-      if (!pos && String(item.str || "").trim())
-        pos = { y: item.transform?.[5] || 0, x: item.transform?.[4] || 0 };
+      if (lastY !== null && Math.abs(y - lastY) > 3) {
+        rows.push(line.join(" "));
+        line = [];
+      }
       line.push(item.str || "");
       lastY = y;
       if (item.hasEOL) {
-        end();
+        rows.push(line.join(" "));
+        line = [];
         lastY = null;
       }
     }
-    end();
-    try {
-      const boxes = trace23BoxRows(
-        trace23PageRects(await page.getOperatorList(), lib.OPS),
-        page.view?.[2] || 612,
-      );
-      // The box belongs to the top text row inside it (a step's first line).
-      boxes.forEach((b) => {
-        const inside = rows.filter(
-          (r) =>
-            typeof r.y === "number" &&
-            r.y >= b.y0 - 1 &&
-            r.y <= b.y1 + 1 &&
-            r.x < b.x0,
-        );
-        if (!inside.length) return;
-        inside.sort((p, q) => q.y - p.y)[0].boxed = true;
-      });
-    } catch (e) {
-      console.warn("TRACE could not read rating boxes on page " + i, e);
-    }
-    pages.push(
-      rows.map((r) => (r.boxed ? TRACE_BOX_MARK : "") + r.text).join("\n"),
-    );
+    if (line.length) rows.push(line.join(" "));
+    pages.push(rows.join("\n"));
   }
   return pages;
 }
@@ -601,8 +414,7 @@ async function trace23HandleFile(file) {
     const box = document.getElementById("trace23Preview");
     if (!box) return;
     box.style.display = "block";
-    const subCount = parsed.steps.reduce((n, x) => n + (x.checks?.length || 0), 0);
-    box.innerHTML = `<h3>Review before import</h3><p class="hint">Found ${parsed.steps.length} numbered performance steps on pages ${parsed.page}–${parsed.endPage}, stopping before Task Performance Summary Block. ${parsed.boxScan ? subCount + " substeps have their own GO / NO-GO boxes and will be rated separately." : "No rating boxes were found in this file, so only the numbered steps will be rated."} Verify critical/leader markers against the original PDF.</p><div class="trace23-meta"><label>Task number<input id="trace23Code" value="${esc(parsed.code)}"></label><label>Task title<input id="trace23Title" value="${esc(parsed.title)}"></label></div><div style="max-height:240px;overflow:auto;margin:12px 0">${parsed.steps.map((x, i) => `<p style="font-size:12px;border-bottom:1px solid #39444a;padding:6px 0"><strong>${x.number}.</strong> ${x.critical && x.leader ? "<b style='color:#e8c56f'>CRITICAL + LEADER</b>" : x.critical ? "<b style='color:#e8c56f'>CRITICAL</b>" : x.leader ? "<b style='color:#a9d5ef'>LEADER</b>" : ""} ${esc(x.text)} ${x.subtasks.length ? `<small>(${x.subtasks.length} subtasks${x.checks?.length ? ", " + x.checks.length + " with rating boxes" : ""})</small>` : ""}</p>`).join("")}</div><div class="trace23-actions"><button class="primary" id="trace23Commit">Import into T&EO Library</button><button class="secondary" id="trace23Cancel">Cancel</button></div>`;
+    box.innerHTML = `<h3>Review before import</h3><p class="hint">Found ${parsed.steps.length} numbered performance steps on pages ${parsed.page}–${parsed.endPage}, stopping before Task Performance Summary Block. Verify critical/leader markers against the original PDF.</p><div class="trace23-meta"><label>Task number<input id="trace23Code" value="${esc(parsed.code)}"></label><label>Task title<input id="trace23Title" value="${esc(parsed.title)}"></label></div><div style="max-height:240px;overflow:auto;margin:12px 0">${parsed.steps.map((x, i) => `<p style="font-size:12px;border-bottom:1px solid #39444a;padding:6px 0"><strong>${x.number}.</strong> ${x.critical && x.leader ? "<b style='color:#e8c56f'>CRITICAL + LEADER</b>" : x.critical ? "<b style='color:#e8c56f'>CRITICAL</b>" : x.leader ? "<b style='color:#a9d5ef'>LEADER</b>" : ""} ${esc(x.text)} ${x.subtasks.length ? `<small>(${x.subtasks.length} subtasks)</small>` : ""}</p>`).join("")}</div><div class="trace23-actions"><button class="primary" id="trace23Commit">Import into T&EO Library</button><button class="secondary" id="trace23Cancel">Cancel</button></div>`;
     document.getElementById("trace23Commit").onclick = trace23Commit;
     document.getElementById("trace23Cancel").onclick = () => {
       trace23Draft = null;
@@ -653,9 +465,7 @@ async function trace23Commit() {
       page: x.page,
       critical: x.critical,
       leader: x.leader,
-      checks: x.checks || [],
     })),
-    boxScan: !!d.boxScan,
   };
   trace23NormalizeEvaluationTask(task);
   tasks.push(task);
@@ -697,35 +507,6 @@ async function trace23Download(id) {
   } catch (e) {
     alert(e.message);
   }
-}
-// T&EOs imported before rating boxes were read: re-read the stored source PDF and
-// add the boxed substeps. Steps are matched by number, so saved ratings stay put.
-async function trace23RescanBoxes(id) {
-  const task = tasks.find((t) => t.id === id);
-  if (!task || trace23BuiltInIds.has(id))
-    throw Error("Only uploaded T&EOs can be scanned.");
-  const stored = await trace23GetFile(id);
-  if (!stored?.blob)
-    throw Error(
-      "The original PDF isn't stored on this device. Delete and re-import the T&EO to add substep rating boxes.",
-    );
-  const name = stored.name || task.source || id + ".pdf";
-  const file = new File([stored.blob], name, {
-    type: stored.blob.type || "application/pdf",
-  });
-  const parsed = trace23Parse(await trace23Pages(file), name);
-  if (!parsed.boxScan)
-    throw Error("No GO / NO-GO boxes were found in the stored source file.");
-  const byNumber = new Map(parsed.steps.map((s) => [s.number, s]));
-  task.steps.forEach((st) => {
-    st.checks = byNumber.get(st.number)?.checks || [];
-  });
-  task.boxScan = true;
-  if (!trace23Save()) throw Error("Could not save the updated T&EO.");
-  return task.steps.reduce((n, s) => n + s.checks.length, 0);
-}
-function trace23NeedsBoxScan(task) {
-  return !!task && !trace23BuiltInIds.has(task.id) && !task.boxScan;
 }
 async function trace23Remove(id) {
   const task = tasks.find((t) => t.id === id);

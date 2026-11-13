@@ -203,15 +203,15 @@ function traceChoiceClass(v, current) {
       : "")
   );
 }
-// Substeps that have their own GO / NO-GO / N/A boxes on the T&EO.
+// Critical and leader substeps, each rated on its own.
 function traceSubchecksHTML(step, i, x) {
-  const checks = step?.checks || [];
+  const checks = traceRatedSubsteps(step);
   if (!checks.length) return "";
   const subs = x.subs || {};
-  return `<div class="trace-subchecks"><div class="trace-subchecks-head">Substeps with rating boxes on the T&EO <small>${checks.filter((c) => subs[c.key] === "GO" || subs[c.key] === "NO-GO").length} / ${checks.length} observed</small></div>${checks
+  return `<div class="trace-subchecks"><div class="trace-subchecks-head">Critical and leader substeps <small>${checks.filter((c) => subs[c.key] === "GO" || subs[c.key] === "NO-GO").length} / ${checks.length} observed</small></div>${checks
     .map(
       (c) =>
-        `<div class="trace-subcheck"><div class="trace-subcheck-text"><b>${esc(step.number)}${esc(c.label)}.</b> ${esc(c.text)}${(() => { const f = traceCheckFlags(step, c); const via = f.from ? ` <small class="trace-flag-via">(from ${esc(f.from)})</small>` : ""; return (f.critical ? ' <span class="trace-flag">CRITICAL</span>' : "") + (f.leader ? ' <span class="trace-flag">LEADER</span>' : "") + (f.critical || f.leader ? via : ""); })()}</div><div class="rating-row">${TRACE_RATING_CHOICES.map(
+        `<div class="trace-subcheck"><div class="trace-subcheck-text"><b>${esc(step.number)}${esc(c.label)}.</b> ${esc(c.text)}${c.critical ? ' <span class="trace-flag">CRITICAL</span>' : ""}${c.leader ? ' <span class="trace-flag">LEADER</span>' : ""}</div><div class="rating-row">${TRACE_RATING_CHOICES.map(
           ([v, t]) =>
             `<button type="button" class="${traceChoiceClass(v, subs[c.key])}" data-sub-measure="${i}" data-sub-key="${esc(c.key)}" data-rating="${v}" aria-label="${esc(t)}: step ${esc(step.number)}${esc(c.label)}">${v === "N/A" ? "N/A" : t}</button>`,
         ).join("")}</div></div>`,
@@ -296,52 +296,60 @@ function colorFor(p) {
 function barHTML(percent) {
   return `<div class="progress-track"><div class="progress-fill" style="width:${percent}%;background:${colorFor(percent)}"></div></div>`;
 }
-// Critical/leader flags for a boxed substep. A box with no * or + of its own
-// takes the flags of the nearest marked step above it (2d(4) → 2d → step 2).
-function traceCheckFlags(step, c) {
-  if (c.critical || c.leader)
-    return { critical: !!c.critical, leader: !!c.leader, from: "" };
-  const parent = (step.checks || [])
-    .filter(
-      (a) =>
-        a !== c &&
-        a.label.length < c.label.length &&
-        c.label.startsWith(a.label) &&
-        (a.critical || a.leader),
-    )
-    .sort((a, b) => b.label.length - a.label.length)[0];
-  return parent
-    ? {
-        critical: !!parent.critical,
-        leader: !!parent.leader,
-        from: step.number + parent.label,
-      }
-    : {
-        critical: !!step.critical,
-        leader: !!step.leader,
-        from: String(step.number),
-      };
+// Substep marker with optional leader/critical flags: "+* e.", "* (4)", "(a)", "_1_".
+const TRACE_SUB_MARKER =
+  /^\s*([*+]{1,2})?\s*(?:([a-z])[.)]|\((\d+)\)|\(([a-z]{1,4})\)|_(\d+)_)\s+/i;
+// Substeps that OC/Ts must rate: every substep marked * (leader) or + (critical).
+// Labels follow the T&EO outline (e, d(4), f(8)(a)) and double as storage keys.
+function traceRatedSubsteps(step) {
+  const out = [],
+    used = new Set();
+  let path = [];
+  (step?.subtasks || []).forEach((line) => {
+    const m = String(line).match(TRACE_SUB_MARKER);
+    if (!m) return;
+    const level = m[2] ? 0 : m[3] ? 1 : m[4] ? 2 : 3;
+    path = path.slice(0, level);
+    path[level] = m[2]
+      ? m[2].toLowerCase()
+      : m[3]
+        ? "(" + m[3] + ")"
+        : m[4]
+          ? "(" + m[4].toLowerCase() + ")"
+          : "_" + m[5] + "_";
+    if (!m[1]) return;
+    const label = path.filter(Boolean).join("");
+    let key = label;
+    for (let n = 2; used.has(key); n++) key = label + "#" + n;
+    used.add(key);
+    out.push({
+      key,
+      label,
+      text: String(line).replace(TRACE_SUB_MARKER, "").replace(/\s+/g, " ").trim(),
+      critical: m[1].includes("+"),
+      leader: m[1].includes("*"),
+    });
+  });
+  return out;
 }
-// Every item with its own rating box: each numbered step, then its boxed substeps.
+// Every item an OC/T rates: each numbered step, then its critical/leader substeps.
 function traceStepItems(t) {
   const out = [];
   (t?.steps || []).forEach((st, i) => {
     out.push({ i, key: "", st });
-    (st.checks || []).forEach((c) => {
-      const f = traceCheckFlags(st, c);
+    traceRatedSubsteps(st).forEach((c) =>
       out.push({
         i,
         key: c.key,
         st: {
           number: st.number + c.label,
           text: c.text,
-          critical: f.critical,
-          leader: f.leader,
+          critical: c.critical,
+          leader: c.leader,
           stage: st.stage,
-          inheritedFrom: f.from,
         },
-      });
-    });
+      }),
+    );
   });
   return out;
 }
@@ -511,7 +519,7 @@ function renderDashboard() {
   window.traceDashboardPending = pending;
   $("content").innerHTML =
     `<div class="dash-shell"><div class="dash-title"><div><h2>Evaluation Dashboard</h2><p>Performance-step coverage · ${esc(trace18.scope === "all" ? "All Units" : trace18UnitName(trace18.scope))} · ${tasks.length} reference T&EOs</p></div><button class="secondary" id="viewAllPending">View outstanding steps ↗</button></div>
- <div class="kpi-grid">${stat("CRITICAL STEP COVERAGE", critical, "critical", "Critical steps observed")}${stat("LEADER STEP COVERAGE", leader, "leader", "Leader steps observed")}${stat("TOTAL · CRITICAL + LEADER", { done, total }, "all", "Steps observed · each box counted once")}<div class="kpi-card coverage-overview"><div class="kpi-label">COVERAGE BY T&EO</div>${entries
+ <div class="kpi-grid">${stat("CRITICAL STEP COVERAGE", critical, "critical", "Critical steps observed")}${stat("LEADER STEP COVERAGE", leader, "leader", "Leader steps observed")}${stat("TOTAL · CRITICAL + LEADER", { done, total }, "all", "Steps observed · each step counted once")}<div class="kpi-card coverage-overview"><div class="kpi-label">COVERAGE BY T&EO</div>${entries
    .map((entry) => {
      const { task, record } = entry,
        c = coverage(task, record),
@@ -538,7 +546,7 @@ function renderDashboard() {
          `<div style="border-top:1px solid #344049;padding:9px 0;font-size:12px"><strong>${esc(x.task.code)} · Step ${esc(x.st.number)}${x.st.critical ? " · CRITICAL" : ""}${x.st.leader ? " · LEADER" : ""}</strong><div>${esc(x.st.text)}</div><small>OC/T justification: ${esc(x.note || "Not provided")}</small></div>`,
      )
      .join("") || '<p class="explainer">No N/A exclusions recorded.</p>'
- }</section><div class="bottom-grid"><section class="dash-panel"><div class="panel-title"><h3>HOW COVERAGE IS CALCULATED</h3></div><p class="explainer">Every step with a GO / NO-GO box on the T&EO is counted, including boxed substeps (e.g., 2d(4)). A boxed substep without its own * or + counts as critical and/or leader through the nearest marked step above it. The total counts each box once, so a step that is both critical and leader is counted once. GO and NO-GO count as observed. <strong>Not Applicable is excluded from the denominator; Not Observed and blank remain outstanding.</strong> Completion measures documentation coverage, not proficiency or official readiness. Data comes from the latest saved local evaluation for each T&EO.</p></section><section class="dash-panel"><div class="panel-title"><h3>QUICK ACTIONS</h3></div><div class="quick-actions"><button class="secondary" data-action="evaluate">${TRACE_MARK}<span>Start / Continue Evaluation</span></button><button class="secondary" id="quickRemaining">${TRACE_MARK}<span>Outstanding Steps</span></button><button class="secondary" data-action="aar">${TRACE_MARK}<span>Generate AAR</span></button><button class="secondary" data-action="history">${TRACE_MARK}<span>Unit History</span></button></div></section></div>
+ }</section><div class="bottom-grid"><section class="dash-panel"><div class="panel-title"><h3>HOW COVERAGE IS CALCULATED</h3></div><p class="explainer">Every numbered step and every substep marked critical (+) or leader (*) is counted, e.g., 1e and 11a. The total counts each step once, so a step that is both critical and leader is counted once. GO and NO-GO count as observed. <strong>Not Applicable is excluded from the denominator; Not Observed and blank remain outstanding.</strong> Completion measures documentation coverage, not proficiency or official readiness. Data comes from the latest saved local evaluation for each T&EO.</p></section><section class="dash-panel"><div class="panel-title"><h3>QUICK ACTIONS</h3></div><div class="quick-actions"><button class="secondary" data-action="evaluate">${TRACE_MARK}<span>Start / Continue Evaluation</span></button><button class="secondary" id="quickRemaining">${TRACE_MARK}<span>Outstanding Steps</span></button><button class="secondary" data-action="aar">${TRACE_MARK}<span>Generate AAR</span></button><button class="secondary" data-action="history">${TRACE_MARK}<span>Unit History</span></button></div></section></div>
  <section id="coverageDetails" class="dash-panel details-panel" tabindex="-1"><div class="panel-title"><h3>OUTSTANDING STEP DETAILS</h3><small>Select a percentage, task card, or chart row to inspect remaining measures</small></div></section></div>`;
   function bindJumps() {
     document
@@ -690,7 +698,10 @@ function renderEvaluate() {
         const step = tasks.find((t) => t.id === state.taskId)?.steps[i];
         const head = b.closest(".trace-subchecks")?.querySelector(".trace-subchecks-head small");
         if (head && step)
-          head.textContent = `${(step.checks || []).filter((c) => ["GO", "NO-GO"].includes(state.measures[i].subs[c.key])).length} / ${(step.checks || []).length} observed`;
+          {
+          const checks = traceRatedSubsteps(step);
+          head.textContent = `${checks.filter((c) => ["GO", "NO-GO"].includes(state.measures[i].subs[c.key])).length} / ${checks.length} observed`;
+        }
         progress();
       }),
   );
@@ -767,12 +778,12 @@ function progress() {
   const t = tasks.find((x) => x.id === state.taskId);
   const done = (r) => r === "GO" || r === "NO-GO";
   let text = `${Object.values(state.measures).filter((x) => done(x.rating)).length} / ${t.measures.length} observed`;
-  const subTotal = t.steps.reduce((n, s) => n + (s.checks?.length || 0), 0);
+  const subTotal = t.steps.reduce((n, s) => n + traceRatedSubsteps(s).length, 0);
   if (subTotal) {
     const subDone = t.steps.reduce(
       (n, s, i) =>
         n +
-        (s.checks || []).filter((c) => done(state.measures[i]?.subs?.[c.key]))
+        traceRatedSubsteps(s).filter((c) => done(state.measures[i]?.subs?.[c.key]))
           .length,
       0,
     );
@@ -846,7 +857,7 @@ function renderHistory() {
     state.selectedId = filtered[0]?.id || "";
   const r = filtered.find((x) => x.id === state.selectedId);
   $("content").innerHTML =
-    `<div class="panel"><div class="section-head"><h2>Evaluation Records</h2><label class="filter">Unit filter<select id="filter"><option value="all">All units</option>${options(units)}</select></label></div><div class="metrics"><div><strong>${filtered.length}</strong><small>Evaluation records</small></div><div><strong>${new Set(filtered.map((x) => x.unitId)).size}</strong><small>Units represented</small></div><div><strong>${filtered.filter((x) => x.rating === "T").length}</strong><small>OC/T T recommendations</small></div></div><div class="records">${filtered.map((x) => `<button class="record ${x.id === state.selectedId ? "selected" : ""}" data-record="${esc(x.id)}"><div><strong>${esc(label(units, x.unitId))}</strong><small>${esc(label(tasks, x.taskId))} · ${esc(label(exercises, x.exerciseId))}</small></div><div><span class="rating-badge">${esc(x.rating)}</span><small>${esc(x.date)}</small></div></button>`).join("") || '<div class="empty">No evaluations for this unit.</div>'}</div>${r ? `<div class="detail"><h3>Selected evaluation</h3><p><strong>${esc(label(units, r.unitId))}</strong> — ${esc(label(tasks, r.taskId))}</p><p><strong>Evaluator:</strong> ${esc(r.evaluator)} · <strong>Status:</strong> ${esc(r.status)}</p><p><strong>Observations:</strong> ${esc(r.observations || "None recorded")}</p><ol>${(tasks.find((t) => t.id === r.taskId)?.measures || []).map((m, i) => `<li>${esc(m)}: <strong>${esc(r.measures[i]?.rating || "N/O")}</strong> — ${esc(r.measures[i]?.note || "No evidence entered")}${(() => { const st = tasks.find((t) => t.id === r.taskId)?.steps[i]; const subs = r.measures[i]?.subs || {}; return st?.checks?.length ? `<ul>${st.checks.map((c) => `<li>${esc(st.number)}${esc(c.label)}. ${esc(c.text.slice(0, 90))}: <strong>${esc(subs[c.key] || "N/O")}</strong></li>`).join("")}</ul>` : ""; })()}</li>`).join("")}</ol><div class="actions"><button class="secondary" id="viewaar">View Event AAR</button><button class="secondary" id="evalaar">Evaluation AAR (Word)</button>${traceCanEdit(r) ? '<button class="danger" id="delete">Delete draft</button>' : ""}</div></div>` : ""}</div>`;
+    `<div class="panel"><div class="section-head"><h2>Evaluation Records</h2><label class="filter">Unit filter<select id="filter"><option value="all">All units</option>${options(units)}</select></label></div><div class="metrics"><div><strong>${filtered.length}</strong><small>Evaluation records</small></div><div><strong>${new Set(filtered.map((x) => x.unitId)).size}</strong><small>Units represented</small></div><div><strong>${filtered.filter((x) => x.rating === "T").length}</strong><small>OC/T T recommendations</small></div></div><div class="records">${filtered.map((x) => `<button class="record ${x.id === state.selectedId ? "selected" : ""}" data-record="${esc(x.id)}"><div><strong>${esc(label(units, x.unitId))}</strong><small>${esc(label(tasks, x.taskId))} · ${esc(label(exercises, x.exerciseId))}</small></div><div><span class="rating-badge">${esc(x.rating)}</span><small>${esc(x.date)}</small></div></button>`).join("") || '<div class="empty">No evaluations for this unit.</div>'}</div>${r ? `<div class="detail"><h3>Selected evaluation</h3><p><strong>${esc(label(units, r.unitId))}</strong> — ${esc(label(tasks, r.taskId))}</p><p><strong>Evaluator:</strong> ${esc(r.evaluator)} · <strong>Status:</strong> ${esc(r.status)}</p><p><strong>Observations:</strong> ${esc(r.observations || "None recorded")}</p><ol>${(tasks.find((t) => t.id === r.taskId)?.measures || []).map((m, i) => `<li>${esc(m)}: <strong>${esc(r.measures[i]?.rating || "N/O")}</strong> — ${esc(r.measures[i]?.note || "No evidence entered")}${(() => { const st = tasks.find((t) => t.id === r.taskId)?.steps[i]; const subs = r.measures[i]?.subs || {}; const checks = traceRatedSubsteps(st); return checks.length ? `<ul>${checks.map((c) => `<li>${esc(st.number)}${esc(c.label)}. ${esc(c.text.slice(0, 90))}: <strong>${esc(subs[c.key] || "N/O")}</strong></li>`).join("")}</ul>` : ""; })()}</li>`).join("")}</ol><div class="actions"><button class="secondary" id="viewaar">View Event AAR</button><button class="secondary" id="evalaar">Evaluation AAR (Word)</button>${traceCanEdit(r) ? '<button class="danger" id="delete">Delete draft</button>' : ""}</div></div>` : ""}</div>`;
   $("filter").value = state.filterUnit;
   if ($("filter").value !== state.filterUnit) $("filter").value = "all";
   $("filter").onchange = (e) => {
