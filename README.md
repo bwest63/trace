@@ -15,7 +15,9 @@ On **AAR & Reports**, pick the training event and observed unit, then **Generate
 
 Before exporting, the compiled paragraphs can be reworded, switched between Sustain and Improve, reordered, left out, or supplemented with new ones. Edits are saved with the event and unit, so they carry into every export; the evaluations themselves are not changed.
 
-In shared mode, **Draft with AI** rewrites the paragraphs from every OC/T's inputs for that unit and event, as a short, big-picture overview for brigade. See [SETUP.md](SETUP.md#optional-ai-draft-of-the-exsum-and-faar).
+In shared mode, **Draft with AI** rewrites the paragraphs from every OC/T's inputs for that unit and event, as a short, big-picture overview for brigade. See [SETUP.md](SETUP.md#optional-ai-draft-of-the-exsum).
+
+The FAAR is built for discussion, not a list of sustains and improves: in shared mode, **Generate FAAR** compiles every OC/T input and uses AI to pick three overarching topics (such as the MDMP, battle rhythm, or sustainment critical path), each with its doctrinal definition, what OC/Ts observed, and a discussion question for the unit. See [SETUP.md](SETUP.md#optional-ai-built-faar-discussion).
 
 ## Keeping the database awake
 
