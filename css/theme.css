@@ -303,7 +303,7 @@ footer {
 }
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 .kpi-card {
@@ -385,16 +385,175 @@ footer {
 .coverage-overview {
   cursor: default;
 }
+/* Dashboard top: coverage cards and METs on the left; the 24-hour summary on
+   the right runs from the top of the coverage cards to the bottom of the METs. */
+.dash-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.5fr);
+  gap: 12px;
+}
+.dash-top-main {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
+}
+.dash-top-side {
+  position: relative;
+}
+.dash-top .kpi-card:not(.daily-summary) {
+  min-height: 0;
+  padding: 13px 15px;
+}
+.dash-top .kpi-inner {
+  margin-top: 10px;
+  gap: 12px;
+}
+.dash-top .donut {
+  width: 66px;
+  height: 66px;
+  flex-basis: 66px;
+}
+.dash-top .donut:before {
+  inset: 9px;
+}
+.dash-top .donut span {
+  font-size: 17px;
+}
+.dash-top .kpi-copy strong {
+  font-size: 19px;
+}
+.dash-top .kpi-copy em {
+  font-size: 14px;
+}
+.dash-top .task-grid {
+  grid-template-columns: repeat(var(--met-cols, 3), minmax(0, 1fr));
+}
+.dash-top .task-tile {
+  padding: 14px;
+}
+/* Same height as two rows of compact tiles, so the summary does not change size. */
+.dash-top .task-grid:not(.compact) .task-tile {
+  min-height: 240px;
+}
+@media (max-width: 1250px) {
+  .dash-top .task-grid:not(.compact) .task-tile {
+    min-height: 0;
+  }
+}
+.dash-top .task-top {
+  gap: 9px;
+}
+.dash-top .task-icon {
+  font-size: 20px;
+}
+.dash-top .task-top b {
+  font-size: 15px;
+  white-space: nowrap;
+}
+.dash-top .task-chevron {
+  font-size: 22px;
+}
+.dash-top .task-progress {
+  margin: 14px 0 10px;
+}
+.dash-top .task-progress strong {
+  font-size: 15px;
+}
+.dash-top .trace29-predictor {
+  margin-top: 10px;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+.dash-top .trace29-predictor strong {
+  font-size: 17px;
+  margin: 0 4px;
+}
+/* More than 3 METs: compact tiles, 4 per row, so the summary keeps its size. */
+.task-grid.compact .task-tile {
+  padding: 10px 11px;
+}
+.task-grid.compact .task-icon,
+.task-grid.compact .trace29-na,
+.task-grid.compact .trace29-predictor small,
+.task-grid.compact .task-meta {
+  display: none;
+}
+.task-grid.compact .task-top b {
+  font-size: 13px;
+}
+.task-grid.compact .task-top small {
+  font-size: 10px;
+}
+.task-grid.compact .task-chevron {
+  font-size: 18px;
+}
+.task-grid.compact .task-progress {
+  margin: 9px 0 7px;
+  gap: 7px;
+}
+.task-grid.compact .task-progress .progress-track {
+  height: 8px;
+}
+.task-grid.compact .task-progress strong {
+  font-size: 13px;
+}
+.task-grid.compact .task-progress > span {
+  font-size: 10px;
+}
+.task-grid.compact .task-meta {
+  padding-top: 7px;
+  font-size: 9.5px;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.task-grid.compact .task-meta span:not(:last-child) {
+  padding-right: 6px;
+}
+.task-grid.compact .trace29-predictor {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 7px;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+.task-grid.compact .trace29-predictor strong {
+  font-size: 14px;
+}
 .daily-summary {
   cursor: default;
   display: flex;
   flex-direction: column;
-  height: 300px;
+  position: absolute;
+  inset: 0;
 }
 @media (max-width: 1250px) {
+  .dash-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-top .task-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dash-top .kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .dash-top-side {
+    min-height: 0;
+  }
   .daily-summary {
-    height: auto;
+    position: static;
     max-height: 420px;
+  }
+}
+@media (max-width: 850px) {
+  .dash-top .task-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .dash-top .kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .daily-summary:hover {
