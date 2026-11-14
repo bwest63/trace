@@ -580,7 +580,7 @@ function traceAIRequest(scopeKey, sig, recs) {
     );
 }
 function traceRefreshDailyCard() {
-  const el = document.querySelector(".daily-summary");
+  const el = document.querySelector(".daily-board");
   if (el && state.tab === "dashboard") el.outerHTML = traceDailySummaryHTML();
 }
 document.addEventListener("click", (e) => {
@@ -597,7 +597,7 @@ document.addEventListener("click", (e) => {
 function traceDailySummaryHTML() {
   const recs = traceDailyRecords();
   const card = (body, foot = "") =>
-    `<div class="kpi-card daily-summary">${body}${foot ? `<div class="daily-foot">${foot}</div>` : ""}</div>`;
+    `<div class="kpi-card daily-board">${body}${foot ? `<div class="daily-foot">${foot}</div>` : ""}</div>`;
   const shared = Boolean(window.TraceSync?.shared && window.TraceSync?.db?.());
   if (!shared || !recs.length) return card(traceDailyInputsHTML(recs));
   const scopeKey = trace18.scope + "|" + trace18.eventScope;
