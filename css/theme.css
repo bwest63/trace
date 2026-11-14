@@ -596,6 +596,14 @@ footer {
 .daily-list {
   margin-top: 6px;
 }
+.daily-edit {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  resize: vertical;
+}
 .daily-item {
   border-bottom: 1px solid #30383d;
   padding: 8px 0;

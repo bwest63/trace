@@ -173,7 +173,7 @@ In shared mode, the dashboard's **Observations Last 24 Hours / Coaching Focus Ne
 2. In Supabase, open your project → **Edge Functions → Secrets** and add a secret named `ANTHROPIC_API_KEY` with the key as its value.
 3. Reload TRACE. Until the secret is set, the box shows the OC/T inputs with a note that the AI summary is not set up.
 
-Each browser asks for a new summary only when the inputs in view change; **Refresh** asks again, and **Show OC/T inputs** shows the original entries. To deploy the function yourself: `supabase functions deploy commander-summary`.
+Each browser asks for a new summary only when the inputs in view change; **Refresh** asks again, and **Show OC/T inputs** shows the original entries. Observations are written in the past tense. With a training event selected, admins can **Edit** the summary (one bullet per line); the edit is saved on the training event, shown to everyone, and kept until new OC/T inputs arrive. **Use AI summary** removes it. To deploy the function yourself: `supabase functions deploy commander-summary`.
 
 ## Optional: AI draft of the EXSUM and FAAR
 
