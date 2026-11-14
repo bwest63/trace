@@ -325,7 +325,9 @@
   if (state.tab === "dashboard") renderDashboard();
 })();
 
-/* TRACE v33: dedicated light, landscape print report; screen dashboard unchanged. */
+/* TRACE v33: dedicated landscape print report; screen dashboard unchanged.
+ * It is a snapshot of the top of the dashboard: coverage, the MET cards and the
+ * Observations Last 24 Hours / Coaching Focus Next 24 Hours card, and stops there. */
 function trace33PrintReport() {
   if (state.tab !== "dashboard") nav("dashboard");
   const root = document.querySelector("#content");
@@ -369,29 +371,30 @@ function trace33PrintReport() {
     title: txt(el.querySelector(".task-top small")),
     pct: txt(el.querySelector(".task-progress strong")),
     count: txt(el.querySelector(".task-progress > span")),
-    meta: txt(el.querySelector(".task-meta")),
+    meta: [...el.querySelectorAll(".task-meta span")].map(txt).join(" · "),
     predictor: txt(el.querySelector(".trace29-predictor strong")) || "—",
     votes: txt(el.querySelector(".trace29-predictor small")),
     na: txt(el.querySelector(".trace29-na")),
   }));
-  const pending = Array.isArray(window.traceDashboardPending)
-    ? window.traceDashboardPending.map((x) => [
-        x.task.code + (x.unit ? " · " + x.unit : ""),
-        String(x.st.number),
-        x.st.text,
-        x.mark === "N/O" ? "NOT OBSERVED" : "NOT EVALUATED",
-      ])
-    : [...root.querySelectorAll(".pending-row")].map((el) =>
-        [...el.querySelectorAll(":scope > span")].map(txt),
-      );
-  const na = [...root.querySelectorAll(".dash-panel")].find((el) =>
-    txt(el.querySelector("h3")).startsWith("NOT APPLICABLE EXCLUSIONS"),
-  );
-  const naRows = na
-    ? [...na.querySelectorAll(":scope > div:not(.panel-title)")].map((el) =>
-        txt(el),
-      )
+  // The 24-hour card exactly as the dashboard shows it (summary or OC/T inputs).
+  const board = root.querySelector(".daily-board");
+  const daily = board
+    ? [...board.querySelectorAll(".daily-col")].map((col) => ({
+        title: txt(col.querySelector(".kpi-label"))
+          .replace(/\d+$/, "")
+          .trim(),
+        items: [
+          ...col.querySelectorAll(".daily-ai li, .daily-item, .daily-empty"),
+        ].map((el) =>
+          el.classList.contains("daily-item")
+            ? { text: txt(el.querySelector("p")), who: txt(el.querySelector("small")) }
+            : { text: txt(el), empty: el.classList.contains("daily-empty") },
+        ),
+      }))
     : [];
+  const dailyNote = board
+    ? txt(board.querySelector(".daily-foot span"))
+    : "";
   const report = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>TRACE Readiness Dashboard — Print Report</title><style>
  @page{size:landscape;margin:0.38in 0.45in}*{box-sizing:border-box}body{margin:0;color:#182736;background:white;font:10px Arial,Helvetica,sans-serif}header{border-bottom:3px solid #ad8d48;padding:0 0 9px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-end}h1{font-size:20px;margin:0 0 4px;letter-spacing:.3px}header small,.muted{color:#586a75}.meta{text-align:right;line-height:1.6;font-size:10px}.section{margin:12px 0}.section h2{font-size:11px;letter-spacing:.8px;text-transform:uppercase;margin:0 0 7px;padding-bottom:5px;border-bottom:1px solid #b9c6cd}.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.kpi{border:1px solid #c7d1d7;border-radius:5px;padding:10px 12px;break-inside:avoid}.kpi b{display:block;font-size:10px;color:#4b5d68}.kpi strong{font-size:21px;display:inline-block;margin:6px 9px 2px 0}.kpi span{color:#455965}.tasks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.task{border:1px solid #c7d1d7;border-top:3px solid #b39759;padding:9px 11px;border-radius:4px;break-inside:avoid;min-height:88px}.task .code{font-weight:bold;font-size:12px}.task .title{color:#546571;line-height:1.3;margin:3px 0 8px;min-height:22px}.task .metrics{display:flex;justify-content:space-between;align-items:center;gap:6px}.task .pct{font-weight:bold;font-size:17px}.task .pred{font-size:10px;font-weight:bold;border:1px solid #8e9ba4;border-radius:3px;padding:3px 6px}.task .pred.T{background:#e0f1e6;border-color:#80b995;color:#175b34}.task .pred.P{background:#fff1d5;border-color:#d2a451;color:#765000}.task .pred.U{background:#fbe5e5;border-color:#cf8787;color:#8b2a2a}.track{height:5px;background:#e4eaee;border-radius:3px;overflow:hidden;margin:6px 0}.fill{height:100%;background:#398d6b}.detail{font-size:9px;color:#5b6972;margin-top:6px}table{width:100%;border-collapse:collapse;font-size:9px;table-layout:fixed}th{text-align:left;background:#e9eff2;color:#273b49;font-size:9px}th,td{border-bottom:1px solid #dbe3e8;padding:5px 7px;vertical-align:top;overflow-wrap:anywhere}tr{break-inside:avoid}th:nth-child(1){width:15%}th:nth-child(2){width:8%}th:nth-child(4){width:17%}.note{font-size:9px;color:#596a73;margin:7px 0}.empty{padding:9px;border:1px dashed #c4ced5;color:#63747d}.foot{border-top:1px solid #cbd5db;padding-top:7px;margin-top:14px;font-size:8px;color:#63717b}.printbar{padding:9px 12px;background:#edf2f5;border-bottom:1px solid #ccd5da;display:flex;gap:12px;align-items:center;margin-bottom:12px}.printbar button{background:#284d40;color:white;border:0;border-radius:4px;padding:8px 14px;cursor:pointer}.printbar span{font-size:11px;color:#536672}@media print{.printbar{display:none!important}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.section{break-inside:auto}.kpis,.tasks{break-inside:auto}header{break-after:avoid}thead{display:table-header-group}}@media screen{body{padding:0 20px 30px;max-width:1300px;margin:auto}}
 
@@ -421,17 +424,23 @@ function trace33PrintReport() {
  .printbar{background:#1a252c!important;border-bottom-color:#43515a!important}
  .printbar button{background:#c6a252!important;color:#10161a!important;font-weight:700}
  .printbar span{color:#d4dee4!important}
+ .dcols{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+ .dcol{background:#171f25!important;border:1px solid #445058!important;border-radius:5px;padding:10px 12px;break-inside:avoid}
+ .dcol h3{font-size:10px;letter-spacing:.6px;margin:0 0 6px;color:#f2e4bd!important}
+ .dcol ul{margin:0;padding-left:15px}
+ .dcol li{font-size:10px;line-height:1.45;margin:0 0 5px;color:#e1e8ec!important}
+ .dcol li small{display:block;font-size:8.5px;color:#9fb0ba!important}
+ .dcol li.none{list-style:none;margin-left:-15px;color:#9fb0ba!important}
  @media print{
    @page{size:letter landscape;margin:.32in .4in}
    html,body{background:#0b1116!important;color:#e7edf0!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}
-   header,.kpi,.task,th,.task .pred,.track,.fill{print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}
+   header,.kpi,.task,.dcol,th,.task .pred,.track,.fill{print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}
    .section{break-inside:auto}
  }
  </style></head><body><div class="printbar"><button onclick="window.print()">Print landscape report</button><span>For the dark TRACE theme, select Landscape and enable Print backgrounds / Background graphics in Safari print options. Disable browser headers and footers.</span></div><header><div><h1>TRACE | READINESS DASHBOARD</h1><small>Training Readiness Assessment &amp; Coaching Environment · Assessment coverage report</small></div><div class="meta"><b>${clean(unit)}</b><br>${clean(event)}<br>Generated ${clean(new Date().toLocaleString())}</div></header>
  <div class="section"><h2>Assessment coverage</h2><div class="kpis">${kpis.map((k) => `<div class="kpi"><b>${clean(k.name)}</b><strong>${clean(k.pct)}</strong><span>${clean(k.count)}</span><div class="detail">${clean(k.note)}</div></div>`).join("")}</div></div>
  <div class="section"><h2>Collective task readiness &amp; OC/T predictions</h2>${tasks.length ? `<div class="tasks">${tasks.map((t) => `<div class="task"><div class="code">${clean(t.code)}</div><div class="title">${clean(t.title)}</div><div class="metrics"><span><span class="pct">${clean(t.pct)}</span> <small>${clean(t.count)}</small></span><span class="pred ${["T", "P", "U"].includes(t.predictor) ? t.predictor : ""}">Predictor: ${clean(t.predictor)}</span></div><div class="track"><div class="fill" style="width:${Math.max(0, Math.min(100, parseInt(t.pct) || 0))}%"></div></div><div class="detail">${clean(t.meta)}<br>${clean(t.votes)}${t.na ? "<br>" + clean(t.na) : ""}</div></div>`).join("")}</div>` : '<div class="empty">No assigned T&amp;EOs for the selected filters.</div>'}</div>
- <div class="section"><h2>Outstanding performance measures (${pending.length})</h2>${pending.length ? `<table><thead><tr><th>T&amp;EO</th><th>Step</th><th>Performance measure</th><th>Status</th></tr></thead><tbody>${pending.map((row) => `<tr>${row.map((v) => `<td>${clean(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>` : '<div class="empty">No outstanding steps displayed.</div>'}</div>
- ${naRows.length ? `<div class="section"><h2>Not applicable exclusions</h2>${naRows.map((x) => `<div class="note">${clean(x)}</div>`).join("")}</div>` : ""}
+ ${daily.length ? `<div class="section daily"><h2>Observations last 24 hours / Coaching focus next 24 hours</h2><div class="dcols">${daily.map((c) => `<div class="dcol"><h3>${clean(c.title)}</h3>${c.items.length ? `<ul>${c.items.map((it) => (it.empty ? `<li class="none">${clean(it.text)}</li>` : `<li>${clean(it.text)}${it.who ? `<small>${clean(it.who)}</small>` : ""}</li>`)).join("")}</ul>` : '<div class="empty">Nothing recorded.</div>'}</div>`).join("")}</div>${dailyNote ? `<div class="note">${clean(dailyNote)}</div>` : ""}</div>` : ""}
  <div class="foot">Coverage is documentation coverage (GO and NO-GO observed); N/A excluded from denominator. OC/T readiness predictor is advisory, not an official commander proficiency determination. Prototype: use fictional/approved data only.</div></body></html>`;
   // Show the report inside TRACE and print from the main page. Print calls made
   // from a pop-up window are ignored on phones and installed (home-screen) apps.
