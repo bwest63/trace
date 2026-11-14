@@ -5,6 +5,12 @@
 // database's row-level security decides what is visible) and asks Claude to
 // summarize them for the commander.
 //
+// "Last 24 hours" goes by when the database received each save (updated_at),
+// not the OC/T device's clock. The summary is shared: it is kept in
+// trace_settings (key "daily_summary|<unit>|<event>") with a fingerprint of
+// the inputs, so every OC/T sees the same text and Claude is asked again only
+// when the inputs change or someone presses Refresh.
+//
 // Needs the ANTHROPIC_API_KEY secret: Supabase dashboard -> Edge Functions ->
 // Secrets. SUPABASE_URL and SUPABASE_ANON_KEY are provided by Supabase.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -57,7 +63,12 @@ Deno.serve(async (req) => {
       503,
     );
 
-  let params: { unitId?: string; eventId?: string; labels?: { tasks?: Record<string, string>; units?: Record<string, string> } } = {};
+  let params: {
+    unitId?: string;
+    eventId?: string;
+    refresh?: boolean;
+    labels?: { tasks?: Record<string, string>; units?: Record<string, string> };
+  } = {};
   try {
     params = await req.json();
   } catch (_) { /* defaults */ }
@@ -76,8 +87,8 @@ Deno.serve(async (req) => {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: rows, error } = await db
     .from("evaluations")
-    .select("data, created_by")
-    .gte("data->>savedAt", since);
+    .select("id, data, created_by, updated_at")
+    .gte("updated_at", since);
   if (error) return reply({ error: "Could not read evaluations." }, 500);
 
   let eventUnits: string[] | null = null;
@@ -94,12 +105,24 @@ Deno.serve(async (req) => {
     if (eventId !== "all" && (r.exerciseId !== eventId || !eventUnits!.includes(r.unitId))) continue;
     const k = [row.created_by || r.evaluator, r.unitId, r.taskId].join("|");
     const cur = latest.get(k);
-    if (!cur || String(r.savedAt) > String(cur.savedAt)) latest.set(k, r);
+    if (!cur || String(row.updated_at) > String(cur._at)) latest.set(k, { ...r, _id: row.id, _at: row.updated_at });
   }
-  const inputs = [...latest.values()]
+  const chosen = [...latest.values()]
     .filter((r) => clip(r.observations) || clip(r.coachingFocus))
-    .sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)))
-    .slice(0, MAX_INPUTS)
+    .sort((a, b) => String(b._at).localeCompare(String(a._at)))
+    .slice(0, MAX_INPUTS);
+
+  // The shared copy, if it was written for exactly these inputs.
+  const sig = chosen.map((r) => `${r._id}@${r._at}`).sort().join(",");
+  const cacheKey = `daily_summary|${unitId}|${eventId}`;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const admin = serviceKey ? createClient(Deno.env.get("SUPABASE_URL")!, serviceKey) : null;
+  if (admin && chosen.length && !params.refresh) {
+    const { data: hit } = await admin.from("trace_settings").select("value").eq("key", cacheKey).maybeSingle();
+    if (hit?.value?.sig === sig) return reply({ ...hit.value.result, shared: true });
+  }
+
+  const inputs = chosen
     .map((r) => ({
       oct: clip(r.evaluator || "OC/T", 100),
       unit: clip(unitLabels[r.unitId] || r.unitId, 120),
@@ -141,11 +164,18 @@ Deno.serve(async (req) => {
   const list = (x: unknown) =>
     Array.isArray(x) ? x.map((s) => clip(s, 600)).filter(Boolean).slice(0, 8) : [];
 
-  return reply({
+  const result = {
     observations: list(out.observations),
     coachingFocus: list(out.coachingFocus),
     inputs: inputs.length,
     octs: new Set(inputs.map((i) => i.oct)).size,
     generatedAt: new Date().toISOString(),
-  });
+  };
+  if (admin) {
+    const { error: saveError } = await admin
+      .from("trace_settings")
+      .upsert({ key: cacheKey, value: { sig, result } });
+    if (saveError) console.error("Could not save the shared summary", saveError.message);
+  }
+  return reply({ ...result, shared: Boolean(admin) });
 });
