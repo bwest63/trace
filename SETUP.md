@@ -175,6 +175,12 @@ In shared mode, the dashboard's **Observations Last 24 Hours / Coaching Focus Ne
 
 Each browser asks for a new summary only when the inputs in view change; **Refresh** asks again, and **Show OC/T inputs** shows the original entries. To deploy the function yourself: `supabase functions deploy commander-summary`.
 
+## Optional: AI draft of the EXSUM and FAAR
+
+In shared mode, **AAR & Reports → EXSUM & FAAR** has a **Draft with AI** button. It runs as the Edge Function `report-draft` (source in `supabase/functions/report-draft/`), which reads every evaluation saved for the selected unit and training event, from all OC/Ts, with the signed-in user's own access. For each T&EO it sends the GO / NO-GO step notes, ODR findings, AAR development inputs, and overall observations to Claude, which writes the sustain and improve paragraphs: each 4–6 sentences at most, with recommendations of no more than 6 sentences. It uses the same `ANTHROPIC_API_KEY` secret as the commander summary.
+
+The draft goes into the paragraph editor tagged **AI draft**, where it can be edited like any other paragraph, and the EXSUM and FAAR are generated from the same templates as before. The paragraphs compiled straight from the evaluations are left out, not deleted: **Remove AI draft** brings them back, and **Redraft with AI** replaces the AI paragraphs (paragraphs you added yourself stay). Evaluations saved after the draft show up as new compiled paragraphs next to it. To deploy the function yourself: `supabase functions deploy report-draft`.
+
 ## Install TRACE as an app
 
 TRACE installs like an app: its own icon, full screen with no browser bars, and it opens even with no signal.

@@ -289,6 +289,19 @@
    * An item's key comes from its compiled text, so an edit stays attached
    * until the OC/T's source wording changes. */
   const emptyEdits = () => ({ items: {}, added: [] });
+  // Takes out an AI draft: its paragraphs, and the "left out" marks it put on
+  // the compiled paragraphs (unless an OC/T has since re-included them).
+  function removeAI(e) {
+    e.added = (e.added || []).filter((a) => !a.ai);
+    for (const [k, ov] of Object.entries(e.items || {})) {
+      if (!ov.aiHidden) continue;
+      delete ov.aiHidden;
+      delete ov.hidden;
+      if (!Object.keys(ov).length) delete e.items[k];
+    }
+  }
+  // AI drafting runs on the shared database's Edge Function.
+  const aiReady = () => Boolean(window.TraceSync?.shared && window.TraceSync?.db?.());
   function itemKey(teoId, kind, it) {
     return `${teoId}|${kind}|${keyOf(it.text) || "r " + keyOf(it.recs[0] || "")}`;
   }
@@ -303,7 +316,7 @@
       return {
         key,
         source: { text: it.text, recs: it.recs, kind: it.kind },
-        edited: Object.keys(ov).some((k) => k !== "order"),
+        edited: Object.keys(ov).some((k) => k !== "order" && k !== "aiHidden"),
         text: ov.text ?? it.text,
         recs: ov.recs ?? it.recs,
         kind: ov.kind || it.kind,
@@ -684,7 +697,7 @@
 <div class="trace-rpt-itembar">
 <div class="trace-rpt-kind" role="group" aria-label="Sustain or improve"><button type="button" data-act="kind" data-kind="S" class="${it.kind === "S" ? "on" : ""}">Sustain</button><button type="button" data-act="kind" data-kind="I" class="${it.kind === "I" ? "on" : ""}">Improve</button></div>
 <label class="trace-rpt-include"><input type="checkbox" data-act="include" ${it.hidden ? "" : "checked"}> Include in reports</label>
-<span class="trace-rpt-tag">${it.added ? "Added" : it.edited ? "Edited" : ""}</span>
+<span class="trace-rpt-tag">${it.ai ? "AI draft" : it.added ? "Added" : it.edited ? "Edited" : ""}</span>
 <span class="trace-rpt-tools"><button type="button" class="secondary" data-act="up" ${i === 0 ? "disabled" : ""} title="Move up" aria-label="Move up">↑</button><button type="button" class="secondary" data-act="down" ${i === list.length - 1 ? "disabled" : ""} title="Move down" aria-label="Move down">↓</button>${
       it.added
         ? '<button type="button" class="secondary" data-act="delete">Delete</button>'
@@ -744,6 +757,7 @@
       }
       const rep = compileReport(ev.id, reportUnit);
       const d = rep.details;
+      const hasAI = (d.edits?.added || []).some((a) => a.ai);
       const where = isAdmin()
         ? "Saved to the training event and shared with every OC/T."
         : "Only admins can save shared report details, so yours are kept on this device.";
@@ -751,7 +765,7 @@
 <div class="form-grid"><label>Observed unit<select id="traceRptUnit">${unitIds
         .map((id) => `<option value="${h(id)}" ${id === reportUnit ? "selected" : ""}>${h(trace18UnitName(id))}</option>`)
         .join("")}</select></label></div>
-<div class="trace-rpt-actions"><button class="primary" id="traceRptExsum">Generate EXSUM (Word)</button><button class="primary" id="traceRptFaar">Generate FAAR (PowerPoint)</button><span id="traceRptStatus" class="hint" role="status"></span></div>
+<div class="trace-rpt-actions"><button class="primary" id="traceRptExsum">Generate EXSUM (Word)</button><button class="primary" id="traceRptFaar">Generate FAAR (PowerPoint)</button>${aiReady() ? `<button class="secondary" id="traceRptAI">${hasAI ? "Redraft with AI" : "Draft with AI"}</button>${hasAI ? '<button class="secondary" id="traceRptAIUndo">Remove AI draft</button>' : ""}` : ""}<span id="traceRptStatus" class="hint" role="status"></span></div>
 <details class="trace-rpt-details"><summary>Report details: CTOs, key leaders, deliverables, signature block</summary><p class="hint">${where}</p><div class="trace-rpt-fields">${FIELDS.map(
         ([k, label, type]) =>
           `<label class="${type === "textarea" ? "wide" : ""}">${h(label)}${
@@ -761,7 +775,7 @@
           }</label>`,
       ).join("")}</div><button class="secondary" id="traceRptSave">Save report details</button></details>
 <h3 class="trace-rpt-h3">Sustains &amp; improves <small>${rep.recordCount} evaluation${rep.recordCount === 1 ? "" : "s"}</small></h3>
-<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p>
+<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. ${aiReady() ? "<b>Draft with AI</b> rewrites them from every OC/T's inputs into 4–6 sentence paragraphs with recommendations; the compiled paragraphs are left out, not deleted. " : ""}Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p>
 <div id="traceRptPreview">${editorHTML(rep)}</div>`;
 
       const status = (m) => (document.getElementById("traceRptStatus").textContent = lastStatus = m);
@@ -868,6 +882,92 @@
           button.disabled = false;
         }
       };
+      const aiBtn = document.getElementById("traceRptAI");
+      if (aiBtn) aiBtn.onclick = () => aiDraft(aiBtn);
+      const undoBtn = document.getElementById("traceRptAIUndo");
+      if (undoBtn)
+        undoBtn.onclick = () => {
+          if (!confirm("Remove the AI paragraphs and bring back the paragraphs compiled from the evaluations?")) return;
+          persist((e) => removeAI(e));
+          redraw();
+          status("AI draft removed.");
+        };
+
+      // ---- AI draft: every OC/T input for this unit and event, rewritten per T&EO.
+      const aiDraft = async (button) => {
+        const teos = rep.observed;
+        if (!teos.length) return status("No saved evaluations to draft from.");
+        if (
+          hasAI &&
+          !confirm("Replace the current AI paragraphs with a new draft? Your edits to them will be lost; paragraphs you added yourself stay.")
+        )
+          return;
+        button.disabled = true;
+        status(`Drafting ${teos.length} T&EO${teos.length === 1 ? "" : "s"} with AI… this can take a minute.`);
+        const labels = {};
+        for (const t of teos) {
+          const task = tasks.find((x) => x.id === t.id);
+          labels[t.id] = {
+            code: t.code,
+            title: t.title,
+            steps: (task?.measures || []).map((m, i) => {
+              const st = task?.steps?.[i];
+              return `${st?.number || i + 1}. ${shortStep(st?.text || m, 120)}`;
+            }),
+          };
+        }
+        try {
+          const { data, error } = await window.TraceSync.db().functions.invoke("report-draft", {
+            body: { eventId: ev.id, unitId: reportUnit, tasks: labels },
+          });
+          if (error) {
+            let msg = "AI drafting is unavailable right now.";
+            try {
+              const body = await error.context?.json?.();
+              if (body?.error) msg = body.error;
+            } catch {}
+            throw Error(msg);
+          }
+          const drafted = teos.filter((t) => data?.teos?.[t.id]);
+          if (!drafted.length) throw Error("The AI returned no paragraphs. Check that evaluations are saved and synced.");
+          persist((e) => {
+            removeAI(e);
+            for (const t of drafted) {
+              // Leave out the compiled paragraphs still in use (removeAI has just
+              // brought back the ones an earlier draft left out).
+              for (const it of t.all)
+                if (!it.added && !e.items[it.key]?.hidden) change(e, it, { hidden: true, aiHidden: true });
+              let order = Math.max(0, ...t.all.map((x) => x.order));
+              for (const [kind, list] of [
+                ["S", data.teos[t.id].sustains || []],
+                ["I", data.teos[t.id].improves || []],
+              ])
+                for (const x of list)
+                  e.added.push({
+                    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+                    teoId: t.id,
+                    kind,
+                    text: x.text,
+                    recs: x.recs || [],
+                    order: ++order,
+                    ai: true,
+                  });
+            }
+          });
+          redraw();
+          const missed = teos.length - drafted.length;
+          status(
+            `AI draft written from ${data.evaluations} evaluation${data.evaluations === 1 ? "" : "s"} by ${data.octs} OC/T${data.octs === 1 ? "" : "s"}${missed ? `; ${missed} T&EO${missed === 1 ? "" : "s"} could not be drafted and keep the compiled paragraphs` : ""}. Review every paragraph before exporting.`,
+          );
+        } catch (e) {
+          console.error(e);
+          status(e.message || "AI drafting failed.");
+        } finally {
+          const b = document.getElementById("traceRptAI");
+          if (b) b.disabled = false;
+        }
+      };
+
       document.getElementById("traceRptExsum").onclick = (e) => generate("EXSUM", e.target);
       document.getElementById("traceRptFaar").onclick = (e) => generate("FAAR", e.target);
     };

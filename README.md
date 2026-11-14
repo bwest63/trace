@@ -15,6 +15,8 @@ On **AAR & Reports**, pick the training event and observed unit, then **Generate
 
 Before exporting, the compiled paragraphs can be reworded, switched between Sustain and Improve, reordered, left out, or supplemented with new ones. Edits are saved with the event and unit, so they carry into every export; the evaluations themselves are not changed.
 
+In shared mode, **Draft with AI** rewrites the paragraphs from every OC/T's inputs for that unit and event, keeping each sustain, improve, and set of recommendations to 6 sentences at most. See [SETUP.md](SETUP.md#optional-ai-draft-of-the-exsum-and-faar).
+
 ## Keeping the database awake
 
 Supabase pauses free-plan projects after about a week of low activity. `.github/workflows/keep-supabase-awake.yml` sends a small read to the database every day so TRACE stays online between exercises. GitHub turns scheduled workflows off after 60 days with no commits; if that happens, re-enable it under **Actions → Keep Supabase awake**.
