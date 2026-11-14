@@ -175,7 +175,13 @@ In shared mode, the dashboard's **Observations Last 24 Hours / Coaching Focus Ne
 
 Each browser asks for a new summary only when the inputs in view change; **Refresh** asks again, and **Show OC/T inputs** shows the original entries. Observations are written in the past tense. With a training event selected, admins can **Edit** the summary (one bullet per line); the edit is saved on the training event, shown to everyone, and kept until new OC/T inputs arrive. **Use AI summary** removes it. To deploy the function yourself: `supabase functions deploy commander-summary`.
 
-## Optional: AI draft of the EXSUM and FAAR
+## Optional: AI-built FAAR discussion
+
+In shared mode, **Generate FAAR** runs the Edge Function `faar-draft` (source in `supabase/functions/faar-draft/`). It reads every evaluation saved for the selected unit and training event, from all OC/Ts, and asks Claude to choose the three overarching topics the inputs say the most about (for example the MDMP, the battle rhythm, the sustainment critical path, orders production, the operations process) from a topic library in the function. For each topic the FAAR gets three slides: the doctrinal definition and source (taken from the library, never written by the AI), what OC/Ts observed (what worked and where it broke down, in the past tense), and an open discussion question with a box for the owner, action, and suspense the unit decides on. It uses the same `ANTHROPIC_API_KEY` secret. Without the shared database or the AI, the FAAR is still generated with placeholder topic slides.
+
+The FAAR layout lives in `templates/faar-template.pptx`, built by `templates/build-faar-template.py` (python-pptx). To change the design, edit the script and run `python3 templates/build-faar-template.py` from the repository root. To add a topic or update a definition, edit `TOPICS` in `supabase/functions/faar-draft/index.ts` and redeploy it with `supabase functions deploy faar-draft`.
+
+## Optional: AI draft of the EXSUM
 
 In shared mode, **AAR & Reports → EXSUM & FAAR** has a **Draft with AI** button. It runs as the Edge Function `report-draft` (source in `supabase/functions/report-draft/`), which reads every evaluation saved for the selected unit and training event, from all OC/Ts, with the signed-in user's own access. For each T&EO it sends the GO / NO-GO step notes, ODR findings, AAR development inputs, and overall observations to Claude, which writes a big-picture overview for brigade: 1–2 sustains and 1–2 improves per T&EO, each 3–4 sentences (6 at most) with a 1–2 sentence recommendation, and no step numbers, staff section names or system names. It uses the same `ANTHROPIC_API_KEY` secret as the commander summary.
 

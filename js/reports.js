@@ -7,8 +7,11 @@
  *                        list is replaced by the generated paragraphs, each
  *                        drawn from the pattern for its role; the rest are removed.
  *   {{.field}}           a field of the generated paragraph's item
- * The FAAR's hidden slide containing {{PAGE_TITLE}} is the pattern for the
- * sustain/improve discussion slides; it is repeated once per page.
+ * The FAAR's slides holding {{T_NAME}} are the pattern for one discussion
+ * topic; they are repeated once per topic. The topics (three overarching
+ * processes, with OC/T observations and a discussion question each) come from
+ * the faar-draft Edge Function. templates/build-faar-template.py builds the
+ * FAAR template.
  *
  * Content comes from the OC/T evaluation records for the selected unit and
  * training event: ODR findings, AAR development inputs, and GO / NO-GO step
@@ -517,62 +520,28 @@
 
   /* ---------------------------------------------------------------- FAAR */
 
-  // Rough height (points) of each paragraph on the discussion slide's text box,
-  // used to split long TE&Os across slides instead of overflowing.
-  // [characters per line, line height, space before]
-  const PAGE_BUDGET = 395;
-  const cost = (it) => {
-    const per = { teo: [58, 24, 6], head: [64, 22, 10], para: [92, 17, 6], rec: [100, 14.5, 3] }[it.role];
-    const chars = clean(it.text).length + (it.role === "rec" ? 16 : 0);
-    return Math.max(1, Math.ceil(chars / per[0])) * per[1] + per[2];
-  };
-  function discussionPages(rep) {
-    const pages = [];
-    for (const t of rep.observed) {
-      if (!t.sustains.length && !t.improves.length) continue;
-      const blocks = [];
-      for (const [head, list] of [
-        ["SUSTAIN", t.sustains],
-        ["IMPROVE", t.improves],
-      ])
-        list.forEach((it, i) =>
-          blocks.push({
-            head,
-            first: i === 0,
-            items: [{ role: "para", text: it.text }, ...it.recs.map((text) => ({ role: "rec", text }))],
-          }),
-        );
-      const teoLine = { role: "teo", text: `${t.code} ${t.title}`.trim() };
-      let page = null,
-        used = 0,
-        head = "";
-      const start = (cont) => {
-        page = { title: "AAR Discussion" + (cont ? " (cont.)" : ""), items: [teoLine] };
-        pages.push(page);
-        used = cost(teoLine);
-        head = "";
-      };
-      start(false);
-      for (const b of blocks) {
-        const headItem = { role: "head", text: b.head };
-        const need = b.items.reduce((n, it) => n + cost(it), 0) + (head !== b.head ? cost(headItem) : 0);
-        if (used + need > PAGE_BUDGET && page.items.length > 1) start(true);
-        if (head !== b.head) {
-          const h = { ...headItem, text: b.head + (b.first ? "" : " (cont.)") };
-          page.items.push(h);
-          used += cost(h);
-          head = b.head;
-        }
-        page.items.push(...b.items);
-        used += b.items.reduce((n, it) => n + cost(it), 0);
-      }
-    }
-    return pages;
-  }
+  // The FAAR discussion centers on three overarching topics (MDMP, battle
+  // rhythm, sustainment critical path...). The faar-draft Edge Function picks
+  // them from all OC/T inputs with AI; without it the deck keeps placeholders.
+  const TOPIC_PLACEHOLDER = (n) => ({
+    name: `[Topic ${n}]`,
+    definition: "[Doctrinal definition]",
+    source: "[Publication]",
+    why: "[Why OC/Ts chose it: the trend seen across METs and T&EOs.]",
+    tasks: [],
+    worked: ["[OC/T observation tied to this topic]"],
+    brokeDown: ["[OC/T observation tied to this topic]"],
+    question: "[Open discussion question for the unit's leaders]",
+  });
+  // "ADP 5-0, The Operations Process" -> "ADP 5-0", to merge duplicate references.
+  const refCode = (s) =>
+    (clean(s).match(/^((?:DA\s+)?(?:PAM|ADP|ATP|FM|AR|TC|JP)\s*[\d.-]+)/i)?.[1] || clean(s)).toUpperCase();
 
-  function faarContent(rep) {
+  function faarContent(rep, aiTopics) {
     const d = rep.details,
       ev = rep.event || {};
+    const orNone = (list, text) =>
+      list.length ? list : [{ role: "item", text, label: "", num: "", code: "", title: text }];
     const deliverable = (line) => {
       const i = line.indexOf(":");
       return i > 0
@@ -582,82 +551,126 @@
     const mets = (rep.teos.some((t) => t.assigned) ? rep.teos.filter((t) => t.assigned) : rep.observed).map(
       (t) => ({ role: "item", code: t.code, title: t.title }),
     );
+    const topics = [0, 1, 2].map((i) => ({ ...TOPIC_PLACEHOLDER(i + 1), ...(aiTopics?.[i] || {}) }));
+    const octs = new Set(rep.observed.flatMap((t) => t.evaluators || [])).size;
+    // Doctrinal references: the topics' sources first, then the AAR page's list.
+    const refs = [],
+      seen = new Set();
+    for (const r of [...topics.map((t) => t.source), ...lines(d.faarRefs)])
+      for (const part of clean(r).replace(/^Described in /, "").split(/, and | and (?=[A-Z]{2,})|; /)) {
+        const k = refCode(part);
+        if (!part || part.startsWith("[") || seen.has(k)) continue;
+        seen.add(k);
+        refs.push({ role: "item", text: part });
+      }
+    const data = {
+      UNIT: rep.unit?.name || "",
+      EVENT: clean(ev.name),
+      DATES: clean(ev.dates) || "Dates TBD",
+      LOCATION_LINE: clean(ev.location) ? " · " + clean(ev.location) : "",
+      BRIEF_DATE: briefDate(d.memoDate),
+      OBSERVING_UNIT: clean(d.observingUnit) || "OC/T team",
+      MISSION: clean(d.mission) || "[Unit mission]",
+      N_TEOS: String(rep.observed.length),
+      N_EVALS: String(rep.recordCount || 0),
+      N_OCTS: String(octs),
+    };
+    topics.forEach((t, i) => {
+      data[`T${"ABC"[i]}_NAME`] = t.name;
+      data[`T${"ABC"[i]}_WHY`] = t.why;
+    });
     return {
-      data: {
-        UNIT: rep.unit?.name || "",
-        EVENT: clean(ev.name),
-        BRIEF_DATE: briefDate(d.memoDate),
-        MISSION: clean(d.mission) || "Unit mission",
-      },
+      data,
       lists: {
-        cto: lines(d.ctos).map((text) => ({ role: "item", text })),
-        met: mets,
-        maar: lines(d.maarDeliverables).map(deliverable),
-        faar: lines(d.faarDeliverables).map((text) => ({ role: "item", text })),
-        ref: lines(d.faarRefs).map((text) => ({ role: "item", text })),
+        cto: orNone(
+          lines(d.ctos).map((text, i) => ({ role: "item", num: String(i + 1), text })),
+          "[Commander's training objectives]",
+        ),
+        met: orNone(mets, "[Mission essential tasks]"),
+        maar: orNone(lines(d.maarDeliverables).map(deliverable), "[MAAR deliverables]"),
+        faar: orNone(lines(d.faarDeliverables).map((text) => ({ role: "item", text })), "[FAAR deliverables]"),
+        ref: orNone(refs, "[References]"),
       },
-      pages: discussionPages(rep),
+      topics: topics.map((t, i) => ({
+        data: {
+          T_NUM: String(i + 1),
+          T_COUNT: "3",
+          T_NAME: t.name,
+          T_DEF: t.definition,
+          T_SRC: t.source,
+          T_WHY: t.why,
+          T_TASKS: (t.tasks || []).join(", ") || "Across the unit's METs",
+          T_QUESTION: t.question,
+        },
+        lists: {
+          tw: orNone((t.worked || []).map((text) => ({ role: "item", text })), "No strengths recorded for this topic."),
+          tb: orNone((t.brokeDown || []).map((text) => ({ role: "item", text })), "No shortfalls recorded for this topic."),
+        },
+      })),
     };
   }
 
-  async function buildFaar(rep) {
+  // Fills the FAAR template. Slides holding {{T_NAME}} are the topic pattern:
+  // they are repeated, in order, once per topic, where the first of them sits.
+  async function buildFaar(rep, aiTopics) {
     const zip = await openTemplate(FAAR_TEMPLATE);
-    const { data, lists, pages } = faarContent(rep);
+    const { data, lists, topics } = faarContent(rep, aiTopics);
     const read = (n) => zip.file(n).async("string");
-    const slidePaths = Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n));
-    let patternPath = "",
-      patternXml = "";
-    for (const n of slidePaths) {
-      const xml = await read(n);
-      if (xml.includes("{{PAGE_TITLE}}")) {
-        patternPath = n;
-        patternXml = xml;
-      } else zip.file(n, fillXml(xml, data, lists, "a"));
-    }
-    if (!patternPath) throw Error("The FAAR template is missing its discussion slide.");
-    const relsOf = (p) => p.replace(/slides\/(slide\d+\.xml)$/, "slides/_rels/$1.rels");
-    const patternRels = await read(relsOf(patternPath));
-    const patternFile = patternPath.split("/").pop();
-
     let presRels = await read("ppt/_rels/presentation.xml.rels");
     let pres = await read("ppt/presentation.xml");
     let types = await read("[Content_Types].xml");
-    const relEl = presRels.match(new RegExp(`<Relationship [^>]*Target="slides/${patternFile}"[^>]*/>`))[0];
-    const patternRid = relEl.match(/Id="([^"]+)"/)[1];
+    const relsOf = (p) => p.replace(/slides\/(slide\d+\.xml)$/, "slides/_rels/$1.rels");
+    // Slides in presentation order, with their relationships.
+    const order = [...pres.matchAll(/<p:sldId [^>]*r:id="([^"]+)"[^>]*\/>/g)].map((m) => {
+      const rel = presRels.match(new RegExp(`<Relationship [^>]*Id="${m[1]}"[^>]*/>`))[0];
+      return { rid: m[1], rel, path: "ppt/" + rel.match(/Target="([^"]+)"/)[1] };
+    });
+    const patterns = [];
+    for (const sl of order) {
+      const xml = await read(sl.path);
+      if (xml.includes("{{T_NAME}}")) patterns.push({ ...sl, xml, rels: await read(relsOf(sl.path)) });
+      else zip.file(sl.path, fillXml(xml, data, lists, "a"));
+    }
+    if (!patterns.length) throw Error("The FAAR template is missing its topic slides.");
 
-    let slideNum = Math.max(...slidePaths.map((n) => +n.match(/slide(\d+)\.xml$/)[1]));
+    let slideNum = Math.max(
+      ...Object.keys(zip.files).map((n) => +(n.match(/^ppt\/slides\/slide(\d+)\.xml$/)?.[1] || 0)),
+    );
     let rid = Math.max(...[...presRels.matchAll(/Id="rId(\d+)"/g)].map((m) => +m[1]));
     let sldId = Math.max(...[...pres.matchAll(/<p:sldId id="(\d+)"/g)].map((m) => +m[1]));
     const ids = [],
       rels = [],
       overrides = [];
-    for (const page of pages) {
-      const n = ++slideNum,
-        r = "rId" + ++rid;
-      const xml = fillXml(
-        patternXml.replace(/(<p:sld\b[^>]*?) show="0"/, "$1"),
-        { ...data, PAGE_TITLE: page.title },
-        { disc: page.items },
-        "a",
-      );
-      zip.file(`ppt/slides/slide${n}.xml`, xml);
-      zip.file(`ppt/slides/_rels/slide${n}.xml.rels`, patternRels);
-      overrides.push(
-        `<Override PartName="/ppt/slides/slide${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`,
-      );
-      rels.push(
-        `<Relationship Id="${r}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${n}.xml"/>`,
-      );
-      ids.push(`<p:sldId id="${++sldId}" r:id="${r}"/>`);
-    }
-    // Swap the hidden pattern slide for the generated ones, in the same position.
-    pres = pres.replace(new RegExp(`<p:sldId [^>]*r:id="${patternRid}"[^>]*/>`), ids.join(""));
-    presRels = presRels.replace(relEl, rels.join(""));
-    types = types
-      .replace(new RegExp(`<Override PartName="/ppt/slides/${patternFile}"[^>]*/>`), "")
-      .replace("</Types>", overrides.join("") + "</Types>");
-    zip.remove(patternPath);
-    zip.remove(relsOf(patternPath));
+    for (const t of topics)
+      for (const pat of patterns) {
+        const n = ++slideNum,
+          r = "rId" + ++rid;
+        zip.file(
+          `ppt/slides/slide${n}.xml`,
+          fillXml(pat.xml, { ...data, ...t.data }, { ...lists, ...t.lists }, "a"),
+        );
+        zip.file(
+          `ppt/slides/_rels/slide${n}.xml.rels`,
+          pat.rels.replace(/<Relationship [^>]*notesSlide[^>]*\/>/g, ""),
+        );
+        overrides.push(
+          `<Override PartName="/ppt/slides/slide${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`,
+        );
+        rels.push(
+          `<Relationship Id="${r}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${n}.xml"/>`,
+        );
+        ids.push(`<p:sldId id="${++sldId}" r:id="${r}"/>`);
+      }
+    // The generated slides take the place of the pattern slides.
+    patterns.forEach((pat, i) => {
+      pres = pres.replace(new RegExp(`<p:sldId [^>]*r:id="${pat.rid}"[^>]*/>`), i ? "" : ids.join(""));
+      presRels = presRels.replace(pat.rel, i ? "" : rels.join(""));
+      const file = pat.path.split("/").pop();
+      types = types.replace(new RegExp(`<Override PartName="/ppt/slides/${file}"[^>]*/>`), "");
+      zip.remove(pat.path);
+      zip.remove(relsOf(pat.path));
+    });
+    types = types.replace("</Types>", overrides.join("") + "</Types>");
     zip.file("ppt/presentation.xml", pres);
     zip.file("ppt/_rels/presentation.xml.rels", presRels);
     zip.file("[Content_Types].xml", types);
@@ -775,7 +788,7 @@
           }</label>`,
       ).join("")}</div><button class="secondary" id="traceRptSave">Save report details</button></details>
 <h3 class="trace-rpt-h3">Sustains &amp; improves <small>${rep.recordCount} evaluation${rep.recordCount === 1 ? "" : "s"}</small></h3>
-<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. ${aiReady() ? "<b>Draft with AI</b> rewrites them from every OC/T's inputs into short, brigade-level paragraphs with a recommendation; the compiled paragraphs are left out, not deleted. " : ""}Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p>
+<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. ${aiReady() ? "<b>Draft with AI</b> rewrites them from every OC/T's inputs into short, brigade-level paragraphs with a recommendation; the compiled paragraphs are left out, not deleted. " : ""}Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. These paragraphs fill the EXSUM. ${aiReady() ? "<b>Generate FAAR</b> compiles every OC/T input for this unit and event and uses AI to build the discussion around three overarching topics, each with its doctrinal definition, what OC/Ts observed, and a discussion question for the unit. " : ""}Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p>
 <div id="traceRptPreview">${editorHTML(rep)}</div>`;
 
       const status = (m) => (document.getElementById("traceRptStatus").textContent = lastStatus = m);
@@ -865,16 +878,59 @@
         else if (act === "delete") persist((e) => (e.added = e.added.filter((x) => "add|" + x.id !== it.key)));
         redraw();
       });
+      // Task names and step labels sent to the AI functions.
+      const taskLabels = (teos) => {
+        const labels = {};
+        for (const t of teos) {
+          const task = tasks.find((x) => x.id === t.id);
+          labels[t.id] = {
+            code: t.code,
+            title: t.title,
+            steps: (task?.measures || []).map((m, i) => {
+              const st = task?.steps?.[i];
+              return `${st?.number || i + 1}. ${shortStep(st?.text || m, 120)}`;
+            }),
+          };
+        }
+        return labels;
+      };
+      const invokeAI = async (fn, body) => {
+        const { data, error } = await window.TraceSync.db().functions.invoke(fn, { body });
+        if (error) {
+          let msg = "AI drafting is unavailable right now.";
+          try {
+            const b = await error.context?.json?.();
+            if (b?.error) msg = b.error;
+          } catch {}
+          throw Error(msg);
+        }
+        return data;
+      };
       const generate = async (kind, button) => {
         button.disabled = true;
         status(`Building ${kind}…`);
         try {
           const now = compileReport(ev.id, reportUnit);
           now.details = { ...DEFAULTS, ...values(), edits: now.details.edits };
-          const blob = kind === "EXSUM" ? await buildExsum(now) : await buildFaar(now);
+          let note = "";
+          let topics = null;
+          if (kind === "FAAR") {
+            if (!now.observed.length) note = " No OC/T evaluations yet, so the topic slides have placeholders.";
+            else if (!aiReady()) note = " AI drafting needs the shared database, so the topic slides have placeholders.";
+            else
+              try {
+                status("Compiling every OC/T input and drafting the FAAR topics with AI… this can take a minute.");
+                const res = await invokeAI("faar-draft", { eventId: ev.id, unitId: reportUnit, tasks: taskLabels(now.observed) });
+                topics = res?.topics || null;
+                note = ` Topics drafted with AI from ${res.evaluations} evaluation${res.evaluations === 1 ? "" : "s"} by ${res.octs} OC/T${res.octs === 1 ? "" : "s"}: review them before the brief.`;
+              } catch (e) {
+                note = ` ${e.message} The topic slides have placeholders.`;
+              }
+          }
+          const blob = kind === "EXSUM" ? await buildExsum(now) : await buildFaar(now, topics);
           const base = `${fileSafe(now.unit?.name)}_${fileSafe(ev.name)}`;
           download(blob, kind === "EXSUM" ? `EXSUM_${base}.docx` : `FAAR_${base}.pptx`);
-          status(`${kind} downloaded.`);
+          status(`${kind} downloaded.${note}`);
         } catch (e) {
           console.error(e);
           status(`${kind} failed: ${e.message}`);
@@ -904,18 +960,7 @@
           return;
         button.disabled = true;
         status(`Drafting ${teos.length} T&EO${teos.length === 1 ? "" : "s"} with AI… this can take a minute.`);
-        const labels = {};
-        for (const t of teos) {
-          const task = tasks.find((x) => x.id === t.id);
-          labels[t.id] = {
-            code: t.code,
-            title: t.title,
-            steps: (task?.measures || []).map((m, i) => {
-              const st = task?.steps?.[i];
-              return `${st?.number || i + 1}. ${shortStep(st?.text || m, 120)}`;
-            }),
-          };
-        }
+        const labels = taskLabels(teos);
         try {
           const { data, error } = await window.TraceSync.db().functions.invoke("report-draft", {
             body: { eventId: ev.id, unitId: reportUnit, tasks: labels },
