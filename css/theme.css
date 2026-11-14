@@ -666,6 +666,10 @@ footer {
   font-size: 10.5px;
   padding: 0;
 }
+.daily-stale {
+  color: #e8c66e;
+  font-weight: 700;
+}
 .daily-error {
   color: #e0a39e;
 }
