@@ -529,9 +529,9 @@
     source: "[Publication]",
     why: "[Why OC/Ts chose it: the trend seen across METs and T&EOs.]",
     tasks: [],
-    worked: ["[OC/T observation tied to this topic]"],
-    brokeDown: ["[OC/T observation tied to this topic]"],
-    question: "[Open discussion question for the unit's leaders]",
+    product: "product (e.g. critical path, battle rhythm)",
+    observed: ["[OC/T observation tied to this topic]", "[OC/T observation tied to this topic]"],
+    questions: ["[How does the unit ...? Ask them to explain their process.]", "[Where did it slow down, and what would you change?]"],
   });
   // "ADP 5-0, The Operations Process" -> "ADP 5-0", to merge duplicate references.
   const refCode = (s) =>
@@ -552,7 +552,6 @@
       (t) => ({ role: "item", code: t.code, title: t.title }),
     );
     const topics = [0, 1, 2].map((i) => ({ ...TOPIC_PLACEHOLDER(i + 1), ...(aiTopics?.[i] || {}) }));
-    const octs = new Set(rep.observed.flatMap((t) => t.evaluators || [])).size;
     // Doctrinal references: the topics' sources first, then the AAR page's list.
     const refs = [],
       seen = new Set();
@@ -571,9 +570,6 @@
       BRIEF_DATE: briefDate(d.memoDate),
       OBSERVING_UNIT: clean(d.observingUnit) || "OC/T team",
       MISSION: clean(d.mission) || "[Unit mission]",
-      N_TEOS: String(rep.observed.length),
-      N_EVALS: String(rep.recordCount || 0),
-      N_OCTS: String(octs),
     };
     topics.forEach((t, i) => {
       data[`T${"ABC"[i]}_NAME`] = t.name;
@@ -583,7 +579,11 @@
       data,
       lists: {
         cto: orNone(
-          lines(d.ctos).map((text, i) => ({ role: "item", num: String(i + 1), text })),
+          lines(d.ctos).map((text, i) => ({
+            role: "item",
+            num: String(i + 1),
+            text: /^CTO\s*\d/i.test(text) ? text : `CTO ${i + 1}: ${text}`,
+          })),
           "[Commander's training objectives]",
         ),
         met: orNone(mets, "[Mission essential tasks]"),
@@ -600,11 +600,12 @@
           T_SRC: t.source,
           T_WHY: t.why,
           T_TASKS: (t.tasks || []).join(", ") || "Across the unit's METs",
-          T_QUESTION: t.question,
+          T_PRODUCT: t.product,
+          T_QA: t.questions?.[0] || TOPIC_PLACEHOLDER(i + 1).questions[0],
+          T_QB: t.questions?.[1] || TOPIC_PLACEHOLDER(i + 1).questions[1],
         },
         lists: {
-          tw: orNone((t.worked || []).map((text) => ({ role: "item", text })), "No strengths recorded for this topic."),
-          tb: orNone((t.brokeDown || []).map((text) => ({ role: "item", text })), "No shortfalls recorded for this topic."),
+          obs: orNone((t.observed || []).map((text) => ({ role: "item", text })), "No OC/T observations recorded for this topic."),
         },
       })),
     };
@@ -788,7 +789,7 @@
           }</label>`,
       ).join("")}</div><button class="secondary" id="traceRptSave">Save report details</button></details>
 <h3 class="trace-rpt-h3">Sustains &amp; improves <small>${rep.recordCount} evaluation${rep.recordCount === 1 ? "" : "s"}</small></h3>
-<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. ${aiReady() ? "<b>Draft with AI</b> rewrites them from every OC/T's inputs into short, brigade-level paragraphs with a recommendation; the compiled paragraphs are left out, not deleted. " : ""}Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. These paragraphs fill the EXSUM. ${aiReady() ? "<b>Generate FAAR</b> compiles every OC/T input for this unit and event and uses AI to build the discussion around three overarching topics, each with its doctrinal definition, what OC/Ts observed, and a discussion question for the unit. " : ""}Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p>
+<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. ${aiReady() ? "<b>Draft with AI</b> rewrites them from every OC/T's inputs into short, brigade-level paragraphs with a recommendation; the compiled paragraphs are left out, not deleted. " : ""}Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. These paragraphs fill the EXSUM. ${aiReady() ? "<b>Generate FAAR</b> compiles every OC/T input for this unit and event and uses AI to build the discussion around three overarching topics, each with its doctrinal definition, a place for the unit's own product, OC/T observations, and two discussion questions for the unit. " : ""}Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p>
 <div id="traceRptPreview">${editorHTML(rep)}</div>`;
 
       const status = (m) => (document.getElementById("traceRptStatus").textContent = lastStatus = m);
@@ -920,7 +921,12 @@
             else
               try {
                 status("Compiling every OC/T input and drafting the FAAR topics with AI… this can take a minute.");
-                const res = await invokeAI("faar-draft", { eventId: ev.id, unitId: reportUnit, tasks: taskLabels(now.observed) });
+                const res = await invokeAI("faar-draft", {
+                  eventId: ev.id,
+                  unitId: reportUnit,
+                  unitName: now.unit?.name || "",
+                  tasks: taskLabels(now.observed),
+                });
                 topics = res?.topics || null;
                 note = ` Topics drafted with AI from ${res.evaluations} evaluation${res.evaluations === 1 ? "" : "s"} by ${res.octs} OC/T${res.octs === 1 ? "" : "s"}: review them before the brief.`;
               } catch (e) {
