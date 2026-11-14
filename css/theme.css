@@ -303,7 +303,7 @@ footer {
 }
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr);
   gap: 12px;
 }
 .kpi-card {
@@ -384,6 +384,58 @@ footer {
 }
 .coverage-overview {
   cursor: default;
+}
+.daily-summary {
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  height: 300px;
+}
+@media (max-width: 1250px) {
+  .daily-summary {
+    height: auto;
+    max-height: 420px;
+  }
+}
+.daily-summary:hover {
+  border-color: #323c42;
+  background: linear-gradient(155deg, #151b20, #10161a);
+}
+.daily-count {
+  color: #c8ae6c;
+}
+.daily-second {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #30383d;
+}
+.daily-list {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  margin-top: 6px;
+}
+.daily-item {
+  border-bottom: 1px solid #30383d;
+  padding: 8px 0;
+}
+.daily-item:last-child {
+  border-bottom: 0;
+}
+.daily-item p {
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #d6e0e5;
+  white-space: pre-wrap;
+}
+.daily-item small,
+.daily-empty {
+  font-size: 10.5px;
+  color: #87949c;
+}
+.daily-empty {
+  margin: 6px 0 0;
 }
 .mini-coverage {
   display: grid;

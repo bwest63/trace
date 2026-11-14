@@ -456,6 +456,67 @@ function jumpToStep(taskId, i, unitId, recordId) {
     setTimeout(() => el.classList.remove("trace42-jump"), 2200);
   }
 }
+// Consolidated OC/T "Observations Last 24 Hours" and "Coaching Focus Next 24 Hours"
+// for the dashboard. Uses each OC/T's latest evaluation per unit and T&EO saved in
+// the last 24 hours, within the dashboard's unit and training event filters.
+// Identical entries from several OC/Ts are merged into one.
+function traceDailySummaryHTML() {
+  const sel =
+    trace18.eventScope === "all"
+      ? null
+      : trace18.events.find((e) => e.id === trace18.eventScope);
+  const since = Date.now() - 24 * 60 * 60 * 1000;
+  const latest = new Map();
+  records
+    .filter(
+      (r) =>
+        (trace18.scope === "all" || r.unitId === trace18.scope) &&
+        (!sel ||
+          (r.exerciseId === sel.id && (sel.unitIds || []).includes(r.unitId))) &&
+        Date.parse(r.savedAt || "") >= since,
+    )
+    .forEach((r) => {
+      const k = [r.createdBy || r.evaluator, r.unitId, r.taskId].join("|");
+      const cur = latest.get(k);
+      if (!cur || (r.savedAt || "") > (cur.savedAt || "")) latest.set(k, r);
+    });
+  const recs = [...latest.values()].sort((x, y) =>
+    (y.savedAt || "").localeCompare(x.savedAt || ""),
+  );
+  const multiUnit = trace18.scope === "all";
+  const group = (field) => {
+    const m = new Map();
+    recs.forEach((r) => {
+      const text = (r[field] || "").trim();
+      if (!text) return;
+      const k = text.toLowerCase().replace(/\s+/g, " ");
+      if (!m.has(k)) m.set(k, { text, who: [] });
+      const t = tasks.find((x) => x.id === r.taskId);
+      m.get(k).who.push(
+        [
+          r.evaluator || "OC/T",
+          t?.code || r.taskId,
+          multiUnit ? trace18UnitName(r.unitId) : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      );
+    });
+    return [...m.values()];
+  };
+  const list = (items, empty) =>
+    items.length
+      ? items
+          .map(
+            (x) =>
+              `<div class="daily-item"><p>${esc(x.text)}</p><small>${x.who.map(esc).join("<br>")}</small></div>`,
+          )
+          .join("")
+      : `<p class="daily-empty">${empty}</p>`;
+  const obs = group("observations"),
+    focus = group("coachingFocus");
+  return `<div class="kpi-card daily-summary"><div class="kpi-label">OBSERVATIONS LAST 24 HOURS<span class="daily-count">${obs.length}</span></div><div class="daily-list">${list(obs, "No OC/T observations saved in the last 24 hours.")}</div><div class="kpi-label daily-second">COACHING FOCUS NEXT 24 HOURS<span class="daily-count">${focus.length}</span></div><div class="daily-list">${list(focus, "No OC/T coaching focus saved in the last 24 hours.")}</div></div>`;
+}
 function renderDashboard() {
   const entries = trace18DashboardCoverage();
   if (trace18.eventScope !== "all" && !entries.length) {
@@ -529,14 +590,7 @@ function renderDashboard() {
   window.traceDashboardPending = pending;
   $("content").innerHTML =
     `<div class="dash-shell"><div class="dash-title"><div><h2>Evaluation Dashboard</h2><p>Performance-step coverage · ${esc(trace18.scope === "all" ? "All Units" : trace18UnitName(trace18.scope))} · ${tasks.filter((t) => !traceIsReference(t)).length} T&EOs in library</p></div><button class="secondary" id="viewAllPending">View outstanding steps ↗</button></div>
- <div class="kpi-grid">${stat("CRITICAL STEP COVERAGE", critical, "critical", "Critical steps observed")}${stat("LEADER STEP COVERAGE", leader, "leader", "Leader steps observed")}${stat("TOTAL · CRITICAL + LEADER", { done, total }, "all", "Steps observed · each step counted once")}<div class="kpi-card coverage-overview"><div class="kpi-label">COVERAGE BY T&EO</div>${entries
-   .map((entry) => {
-     const { task, record } = entry,
-       c = coverage(task, record),
-       p = pof(c);
-     return `<button class="mini-coverage" data-detail="${esc(keyOf(entry))}" title="${esc(unitTag(entry))}"><span>${esc(task.code)}${unitTag(entry) ? " · " + esc(unitTag(entry)) : ""}</span><span class="mini-track">${barHTML(p)}</span><strong>${p}%</strong><span>›</span></button>`;
-   })
-   .join("")}</div></div>
+ <div class="kpi-grid">${stat("CRITICAL STEP COVERAGE", critical, "critical", "Critical steps observed")}${stat("LEADER STEP COVERAGE", leader, "leader", "Leader steps observed")}${stat("TOTAL · CRITICAL + LEADER", { done, total }, "all", "Steps observed · each step counted once")}${traceDailySummaryHTML()}</div>
  <div class="task-grid">${taskCards}</div>
  <div class="analytics-grid"><section class="dash-panel"><div class="panel-title"><h3>TASK COMPLETION BY T&EO</h3><small>Click a row for outstanding steps</small></div><div class="legend"><span><i style="background:#55bd7a"></i> GO</span><span><i style="background:#d55b52"></i> NO-GO</span><span><i style="background:#79818b"></i> Not Observed</span><span><i style="background:#30373e"></i> Blank</span><span><i style="background:#9da7b0"></i> N/A (excluded)</span></div>${breakdown}</section><section class="dash-panel"><div class="panel-title"><h3>REMAINING STEPS (${pending.length})</h3><button class="text-link" id="allPending">View all ↗</button></div><div class="pending-table"><div class="pending-head"><span>T&EO</span><span>STEP</span><span>PERFORMANCE MEASURE</span><span>STATUS</span></div>${
    pending
