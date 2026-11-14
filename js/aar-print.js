@@ -235,7 +235,8 @@
           return [
             `\nAssessment ${i + 1} — ${label(units, r.unitId)} / ${t?.code || r.taskId} ${t?.title || ""}`,
             `OC/T: ${r.evaluator || "Not identified"} | Date: ${r.date || "Not documented"} | Projected rating: ${r.rating || "Not provided"}`,
-            `Observations: ${r.observations || "Not documented"}`,
+            `Observations last 24 hours: ${r.observations || "Not documented"}`,
+            `Coaching focus next 24 hours: ${r.coachingFocus || "Not documented"}`,
             ...(r.measures || [])
               .map((m, j) =>
                 m?.rating || m?.note

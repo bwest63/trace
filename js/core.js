@@ -87,6 +87,7 @@ let state = {
   date: new Date().toLocaleDateString("en-CA"),
   rating: "",
   observations: "",
+  coachingFocus: "",
   measures: {},
   filterUnit: "all",
   selectedId: "",
@@ -188,11 +189,13 @@ function traceRestoreEvaluation() {
   state.findings = [];
   state.rating = "";
   state.observations = "";
+  state.coachingFocus = "";
   state.dirty = false;
   TRACE_AAR_FIELDS.forEach((k) => (state[k] = latest?.aarInputs?.[k] || ""));
   if (latest) {
     state.evaluator = latest.evaluator || state.evaluator;
     state.observations = latest.observations || "";
+    state.coachingFocus = latest.coachingFocus || "";
   }
 }
 const TRACE_RATING_CHOICES = [
@@ -440,6 +443,7 @@ function jumpToStep(taskId, i, unitId, recordId) {
     state.rating = r.rating === "Pending" ? "" : r.rating || "";
     state.evaluator = r.evaluator || "";
     state.observations = r.observations || "";
+    state.coachingFocus = r.coachingFocus || "";
     state.findings = (r.findings || []).map((x) => ({ ...x }));
     TRACE_AAR_FIELDS.forEach((k) => (state[k] = r.aarInputs?.[k] || ""));
     state.editingId = r.id;
@@ -619,7 +623,7 @@ function updatePreview() {
 function renderEvaluate() {
   const task = tasks.find((t) => t.id === state.taskId) || tasks[0];
   $("content").innerHTML =
-    `<div class="panel"><div class="section-head"><h2>New Evaluation</h2><span>OC/T recommendation — not a commander assessment</span></div><div class="form-grid"><label>Evaluated unit<select id="unit">${options(units)}</select></label><label>Training event<select id="exercise">${exercises.map((x) => `<option value="${esc(x.id)}">${esc(x.name)} · ${esc(x.dates)}</option>`).join("")}</select></label><label>Collective training task<select id="task">${tasks.map((t) => `<option value="${esc(t.id)}">${esc(t.code)} · ${esc(t.title)}</option>`).join("")}</select></label><label>Observation date<input id="date" type="date" value="${esc(state.date)}"></label><label>Evaluator<input id="evaluator" placeholder="e.g., OC/T Alpha" value="${esc(state.evaluator)}"></label></div><div class="task-summary"><strong>${esc(task.title)}</strong><small>${esc(task.code)} · Version ${esc(task.version)}</small><p>Record each top-level performance step, with its supporting substeps. Critical (+) and leader (*) flags are retained. Not Observed is not equivalent to NO-GO. Ratings remain OC/T recommendations; official matrix criteria must be reviewed manually.</p></div><div class="section-head"><h2>Performance Measures</h2><span id="progress">0 / ${task.measures.length} observed</span></div>${task.measures.map(measureHTML).join("")}<div class="alert-info" id="ratingPreview"></div><div class="form-grid lower"><label>OC/T-recommended overall proficiency<select id="rating"><option value="">Select a recommendation</option><option value="T">T — Trained</option><option value="P">P — Practiced</option><option value="U">U — Untrained</option></select></label></div><p class="hint">The automated analysis is advisory and based on entered GO/NO-GO values. The OC/T selects a separate recommended rating after reviewing the full T&EO matrix and evaluation conditions.</p><label class="wide">Overall observations / coaching points<textarea id="observations" rows="5" placeholder="Strengths, deficiencies, coaching provided, recommended follow-up...">${esc(state.observations)}</textarea></label><h3>AAR development inputs</h3><p class="section-sub">These fields enable analysis and recommendations instead of copying comments. Leave unknown facts blank; TRACE will flag gaps.</p><div class="fieldgrid"><label>Training objective<textarea id="objective" placeholder="What was the unit expected to accomplish?"></textarea></label><label>What actually happened<textarea id="actual" placeholder="Chronology / confirmed observed outcome"></textarea></label><label>Cause / discussion (verified or proposed)<textarea id="cause" placeholder="Why did performance differ from standard? Label hypotheses."></textarea></label><label>What to sustain<textarea id="sustain" placeholder="Successful practice and why it worked"></textarea></label><label>Corrective action / retraining<textarea id="corrective" placeholder="Specific change, retraining, or SOP adjustment"></textarea></label><label>Action owner<textarea id="actionOwner" placeholder="Proposed owner, not assumed"></textarea></label><label>Action suspense<input type="date" id="actionDue"></label><label>Observation location<input id="location" placeholder="Fictional exercise location"></label></div><h3>Observation–Discussion–Recommendation (ODR) findings</h3><p class="section-sub">Create multiple findings for the same performance step. Each finding has its own evidence, discussion, recommendation, and proposed corrective action. These are draft OC/T findings, not confirmed root causes.</p><div id="findingList"></div><button type="button" class="secondary" id="addFinding">＋ Add ODR Finding</button><p id="feedback" class="error" role="alert"></p><button class="primary" id="save">＋ Save / Update Draft Evaluation</button><p class="hint">Saved performance measures are restored when you return to the same unit, training event, and task. GO and NO-GO count toward dashboard coverage; Not Observed and Not Applicable do not.</p></div>`;
+    `<div class="panel"><div class="section-head"><h2>New Evaluation</h2><span>OC/T recommendation — not a commander assessment</span></div><div class="form-grid"><label>Evaluated unit<select id="unit">${options(units)}</select></label><label>Training event<select id="exercise">${exercises.map((x) => `<option value="${esc(x.id)}">${esc(x.name)} · ${esc(x.dates)}</option>`).join("")}</select></label><label>Collective training task<select id="task">${tasks.map((t) => `<option value="${esc(t.id)}">${esc(t.code)} · ${esc(t.title)}</option>`).join("")}</select></label><label>Observation date<input id="date" type="date" value="${esc(state.date)}"></label><label>Evaluator<input id="evaluator" placeholder="e.g., OC/T Alpha" value="${esc(state.evaluator)}"></label></div><div class="task-summary"><strong>${esc(task.title)}</strong><small>${esc(task.code)} · Version ${esc(task.version)}</small><p>Record each top-level performance step, with its supporting substeps. Critical (+) and leader (*) flags are retained. Not Observed is not equivalent to NO-GO. Ratings remain OC/T recommendations; official matrix criteria must be reviewed manually.</p></div><div class="section-head"><h2>Performance Measures</h2><span id="progress">0 / ${task.measures.length} observed</span></div>${task.measures.map(measureHTML).join("")}<div class="alert-info" id="ratingPreview"></div><div class="form-grid lower"><label>OC/T-recommended overall proficiency<select id="rating"><option value="">Select a recommendation</option><option value="T">T — Trained</option><option value="P">P — Practiced</option><option value="U">U — Untrained</option></select></label></div><p class="hint">The automated analysis is advisory and based on entered GO/NO-GO values. The OC/T selects a separate recommended rating after reviewing the full T&EO matrix and evaluation conditions.</p><h3>Observations Last 24 Hours / Coaching Focus Next 24 Hours</h3><div class="fieldgrid"><label>Observations Last 24 Hours<textarea id="observations" rows="6" placeholder="What the unit did over the last 24 hours: strengths, deficiencies, and coaching provided...">${esc(state.observations)}</textarea></label><label>Coaching Focus Next 24 Hours<textarea id="coachingFocus" rows="6" placeholder="Where OC/T coaching will focus over the next 24 hours...">${esc(state.coachingFocus)}</textarea></label></div><h3>Observation–Discussion–Recommendation (ODR) findings</h3><p class="section-sub">Create multiple findings for the same performance step. Each finding has its own evidence, discussion, recommendation, and proposed corrective action. These are draft OC/T findings, not confirmed root causes.</p><div id="findingList"></div><button type="button" class="secondary" id="addFinding">＋ Add ODR Finding</button><p id="feedback" class="error" role="alert"></p><button class="primary" id="save">＋ Save / Update Draft Evaluation</button><p class="hint">Saved performance measures are restored when you return to the same unit, training event, and task. GO and NO-GO count toward dashboard coverage; Not Observed and Not Applicable do not.</p></div>`;
   ["unit", "exercise", "task", "rating"].forEach(
     (id) =>
       ($(id).value =
@@ -641,6 +645,7 @@ function renderEvaluate() {
   bind("evaluator", "evaluator");
   bind("rating", "rating");
   bind("observations", "observations");
+  bind("coachingFocus", "coachingFocus");
   [
     "objective",
     "actual",
@@ -820,6 +825,7 @@ function save() {
     rating: state.rating || "Pending",
     status: "Draft — OC/T recommendation",
     observations: state.observations.trim(),
+    coachingFocus: (state.coachingFocus || "").trim(),
     aarInputs: Object.fromEntries(
       TRACE_AAR_FIELDS.map((k) => [k, (state[k] || "").trim()]),
     ),
@@ -863,7 +869,7 @@ function renderHistory() {
     state.selectedId = filtered[0]?.id || "";
   const r = filtered.find((x) => x.id === state.selectedId);
   $("content").innerHTML =
-    `<div class="panel"><div class="section-head"><h2>Evaluation Records</h2><label class="filter">Unit filter<select id="filter"><option value="all">All units</option>${options(units)}</select></label></div><div class="metrics"><div><strong>${filtered.length}</strong><small>Evaluation records</small></div><div><strong>${new Set(filtered.map((x) => x.unitId)).size}</strong><small>Units represented</small></div><div><strong>${filtered.filter((x) => x.rating === "T").length}</strong><small>OC/T T recommendations</small></div></div><div class="records">${filtered.map((x) => `<button class="record ${x.id === state.selectedId ? "selected" : ""}" data-record="${esc(x.id)}"><div><strong>${esc(label(units, x.unitId))}</strong><small>${esc(label(tasks, x.taskId))} · ${esc(label(exercises, x.exerciseId))}</small></div><div><span class="rating-badge">${esc(x.rating)}</span><small>${esc(x.date)}</small></div></button>`).join("") || '<div class="empty">No evaluations for this unit.</div>'}</div>${r ? `<div class="detail"><h3>Selected evaluation</h3><p><strong>${esc(label(units, r.unitId))}</strong> — ${esc(label(tasks, r.taskId))}</p><p><strong>Evaluator:</strong> ${esc(r.evaluator)} · <strong>Status:</strong> ${esc(r.status)}</p><p><strong>Observations:</strong> ${esc(r.observations || "None recorded")}</p><ol>${(tasks.find((t) => t.id === r.taskId)?.measures || []).map((m, i) => `<li>${esc(m)}: <strong>${esc(r.measures[i]?.rating || "N/O")}</strong> — ${esc(r.measures[i]?.note || "No evidence entered")}${(() => { const st = tasks.find((t) => t.id === r.taskId)?.steps[i]; const subs = r.measures[i]?.subs || {}; const checks = traceRatedSubsteps(st); return checks.length ? `<ul>${checks.map((c) => `<li>${esc(st.number)}${esc(c.label)}. ${esc(c.text.slice(0, 90))}: <strong>${esc(subs[c.key] || "N/O")}</strong></li>`).join("")}</ul>` : ""; })()}</li>`).join("")}</ol><div class="actions"><button class="secondary" id="viewaar">View Event AAR</button><button class="secondary" id="evalaar">Evaluation AAR (Word)</button>${traceCanEdit(r) ? '<button class="danger" id="delete">Delete draft</button>' : ""}</div></div>` : ""}</div>`;
+    `<div class="panel"><div class="section-head"><h2>Evaluation Records</h2><label class="filter">Unit filter<select id="filter"><option value="all">All units</option>${options(units)}</select></label></div><div class="metrics"><div><strong>${filtered.length}</strong><small>Evaluation records</small></div><div><strong>${new Set(filtered.map((x) => x.unitId)).size}</strong><small>Units represented</small></div><div><strong>${filtered.filter((x) => x.rating === "T").length}</strong><small>OC/T T recommendations</small></div></div><div class="records">${filtered.map((x) => `<button class="record ${x.id === state.selectedId ? "selected" : ""}" data-record="${esc(x.id)}"><div><strong>${esc(label(units, x.unitId))}</strong><small>${esc(label(tasks, x.taskId))} · ${esc(label(exercises, x.exerciseId))}</small></div><div><span class="rating-badge">${esc(x.rating)}</span><small>${esc(x.date)}</small></div></button>`).join("") || '<div class="empty">No evaluations for this unit.</div>'}</div>${r ? `<div class="detail"><h3>Selected evaluation</h3><p><strong>${esc(label(units, r.unitId))}</strong> — ${esc(label(tasks, r.taskId))}</p><p><strong>Evaluator:</strong> ${esc(r.evaluator)} · <strong>Status:</strong> ${esc(r.status)}</p><p><strong>Observations last 24 hours:</strong> ${esc(r.observations || "None recorded")}</p><p><strong>Coaching focus next 24 hours:</strong> ${esc(r.coachingFocus || "None recorded")}</p><ol>${(tasks.find((t) => t.id === r.taskId)?.measures || []).map((m, i) => `<li>${esc(m)}: <strong>${esc(r.measures[i]?.rating || "N/O")}</strong> — ${esc(r.measures[i]?.note || "No evidence entered")}${(() => { const st = tasks.find((t) => t.id === r.taskId)?.steps[i]; const subs = r.measures[i]?.subs || {}; const checks = traceRatedSubsteps(st); return checks.length ? `<ul>${checks.map((c) => `<li>${esc(st.number)}${esc(c.label)}. ${esc(c.text.slice(0, 90))}: <strong>${esc(subs[c.key] || "N/O")}</strong></li>`).join("")}</ul>` : ""; })()}</li>`).join("")}</ol><div class="actions"><button class="secondary" id="viewaar">View Event AAR</button><button class="secondary" id="evalaar">Evaluation AAR (Word)</button>${traceCanEdit(r) ? '<button class="danger" id="delete">Delete draft</button>' : ""}</div></div>` : ""}</div>`;
   $("filter").value = state.filterUnit;
   if ($("filter").value !== state.filterUnit) $("filter").value = "all";
   $("filter").onchange = (e) => {
@@ -1147,6 +1153,7 @@ Applicable T&EO: ${t.code}; evaluate relevant performance measures under the doc
 
 2. WHAT ACTUALLY HAPPENED? (FACTS / CHRONOLOGY)
 ${a.actual || "[Add verified sequence of events, timing, conditions, and participant perspectives.]"}
+Observations last 24 hours: ${r.observations || "[Not recorded]"}
 Documented results: ${good.length} GO, ${bad.length} NO-GO, ${unseen.length} not observed / unassessed.
 GO rates — all observed: ${analysis.allPct ?? "N/A"}%; critical observed: ${analysis.criticalPct ?? "N/A"}%; leader observed: ${analysis.leaderPct ?? "N/A"}%.
 
@@ -1169,6 +1176,7 @@ ${unseen.length ? unseen.map((x) => "Step " + x.st.number + ": " + x.st.text).jo
 Recommended action: ${a.corrective || "[Determine specific retraining, SOP adjustment, rehearsal, or process change with the unit.]"}
 Proposed responsible party: ${a.actionOwner || "[Assign during AAR]"}
 Proposed suspense: ${a.actionDue || "[Agree suspense during AAR]"}
+Coaching focus next 24 hours: ${r.coachingFocus || "[Not recorded]"}
 Verification of improvement: [Define a repeatable observed performance measure and follow-up evaluation.]
 
 EVALUATOR'S PROPOSED ASSESSMENT
