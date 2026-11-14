@@ -165,6 +165,16 @@ TRACE always keeps at least one active admin and refuses any change that would l
 
 **Deleting an account permanently** isn't possible from TRACE (it needs Supabase's secret key, which must never be in a web page). Use Supabase → **Authentication → Users** → **⋯** → **Delete user**. Their saved records stay in TRACE, and from then on only admins can change them. Turning off access is usually enough.
 
+## Optional: AI commander summary on the dashboard
+
+In shared mode, the dashboard's **Observations Last 24 Hours / Coaching Focus Next 24 Hours** box shows an AI-written summary for the commander instead of each OC/T's text. It runs as the Supabase Edge Function `commander-summary` (source in `supabase/functions/commander-summary/`), which reads the last 24 hours of evaluations with the signed-in user's own access and sends the observations and coaching focus text to Anthropic's Claude API to summarize. Confirm your organization allows that before turning it on.
+
+1. Create an API key at [console.anthropic.com](https://console.anthropic.com) (**Settings → API keys**). Usage is billed to that account.
+2. In Supabase, open your project → **Edge Functions → Secrets** and add a secret named `ANTHROPIC_API_KEY` with the key as its value.
+3. Reload TRACE. Until the secret is set, the box shows the OC/T inputs with a note that the AI summary is not set up.
+
+Each browser asks for a new summary only when the inputs in view change; **Refresh** asks again, and **Show OC/T inputs** shows the original entries. To deploy the function yourself: `supabase functions deploy commander-summary`.
+
 ## Install TRACE as an app
 
 TRACE installs like an app: its own icon, full screen with no browser bars, and it opens even with no signal.

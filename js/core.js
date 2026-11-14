@@ -456,11 +456,18 @@ function jumpToStep(taskId, i, unitId, recordId) {
     setTimeout(() => el.classList.remove("trace42-jump"), 2200);
   }
 }
-// Consolidated OC/T "Observations Last 24 Hours" and "Coaching Focus Next 24 Hours"
-// for the dashboard. Uses each OC/T's latest evaluation per unit and T&EO saved in
-// the last 24 hours, within the dashboard's unit and training event filters.
-// Identical entries from several OC/Ts are merged into one.
-function traceDailySummaryHTML() {
+// Dashboard "Observations Last 24 Hours" / "Coaching Focus Next 24 Hours" card.
+// Uses each OC/T's latest evaluation per unit and T&EO saved in the last 24 hours,
+// within the dashboard's unit and training event filters. In shared mode the card
+// shows an AI summary for the commander (Supabase Edge Function
+// "commander-summary"); the OC/T inputs stay one tap away. Local mode, or an
+// AI failure, shows the OC/T inputs with identical entries merged.
+const TRACE_AI_KEY = "trace_ai_commander_summary_v1";
+const traceAI = { cache: {}, pending: {}, showInputs: false };
+try {
+  traceAI.cache = JSON.parse(localStorage.getItem(TRACE_AI_KEY) || "{}") || {};
+} catch (e) {}
+function traceDailyRecords() {
   const sel =
     trace18.eventScope === "all"
       ? null
@@ -480,9 +487,11 @@ function traceDailySummaryHTML() {
       const cur = latest.get(k);
       if (!cur || (r.savedAt || "") > (cur.savedAt || "")) latest.set(k, r);
     });
-  const recs = [...latest.values()].sort((x, y) =>
-    (y.savedAt || "").localeCompare(x.savedAt || ""),
-  );
+  return [...latest.values()]
+    .filter((r) => (r.observations || "").trim() || (r.coachingFocus || "").trim())
+    .sort((x, y) => (y.savedAt || "").localeCompare(x.savedAt || ""));
+}
+function traceDailyInputsHTML(recs) {
   const multiUnit = trace18.scope === "all";
   const group = (field) => {
     const m = new Map();
@@ -515,7 +524,111 @@ function traceDailySummaryHTML() {
       : `<p class="daily-empty">${empty}</p>`;
   const obs = group("observations"),
     focus = group("coachingFocus");
-  return `<div class="kpi-card daily-summary"><div class="kpi-label">OBSERVATIONS LAST 24 HOURS<span class="daily-count">${obs.length}</span></div><div class="daily-list">${list(obs, "No OC/T observations saved in the last 24 hours.")}</div><div class="kpi-label daily-second">COACHING FOCUS NEXT 24 HOURS<span class="daily-count">${focus.length}</span></div><div class="daily-list">${list(focus, "No OC/T coaching focus saved in the last 24 hours.")}</div></div>`;
+  return `<div class="kpi-label">OBSERVATIONS LAST 24 HOURS<span class="daily-count">${obs.length}</span></div><div class="daily-list">${list(obs, "No OC/T observations saved in the last 24 hours.")}</div><div class="kpi-label daily-second">COACHING FOCUS NEXT 24 HOURS<span class="daily-count">${focus.length}</span></div><div class="daily-list">${list(focus, "No OC/T coaching focus saved in the last 24 hours.")}</div>`;
+}
+function traceAISummaryBodyHTML(res) {
+  const list = (items, empty) =>
+    items.length
+      ? `<ul class="daily-ai">${items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`
+      : `<p class="daily-empty">${empty}</p>`;
+  return `<div class="kpi-label">OBSERVATIONS LAST 24 HOURS<span class="daily-tag">AI SUMMARY</span></div><div class="daily-list">${list(res.observations || [], "No OC/T observations saved in the last 24 hours.")}</div><div class="kpi-label daily-second">COACHING FOCUS NEXT 24 HOURS<span class="daily-tag">AI SUMMARY</span></div><div class="daily-list">${list(res.coachingFocus || [], "No OC/T coaching focus saved in the last 24 hours.")}</div>`;
+}
+function traceAIRequest(scopeKey, sig, recs) {
+  if (traceAI.pending[scopeKey]) return;
+  const db = window.TraceSync?.db?.();
+  if (!db) return;
+  traceAI.pending[scopeKey] = sig;
+  const labels = { tasks: {}, units: {} };
+  recs.forEach((r) => {
+    const t = tasks.find((x) => x.id === r.taskId);
+    labels.tasks[r.taskId] = t ? `${t.code} ${t.title}` : r.taskId;
+    labels.units[r.unitId] = trace18UnitName(r.unitId);
+  });
+  const done = (entry) => {
+    delete traceAI.pending[scopeKey];
+    traceAI.cache[scopeKey] = entry;
+    try {
+      localStorage.setItem(TRACE_AI_KEY, JSON.stringify(traceAI.cache));
+    } catch (e) {}
+    traceRefreshDailyCard();
+  };
+  db.functions
+    .invoke("commander-summary", {
+      body: {
+        unitId: trace18.scope,
+        eventId: trace18.eventScope,
+        labels,
+      },
+    })
+    .then(async ({ data, error }) => {
+      if (error) {
+        let msg = "The AI summary is unavailable right now.";
+        try {
+          const body = await error.context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch (e) {}
+        return done({ sig, error: msg, at: new Date().toISOString() });
+      }
+      done({ sig, result: data, at: data?.generatedAt || new Date().toISOString() });
+    })
+    .catch(() =>
+      done({
+        sig,
+        error: "The AI summary is unavailable right now.",
+        at: new Date().toISOString(),
+      }),
+    );
+}
+function traceRefreshDailyCard() {
+  const el = document.querySelector(".daily-summary");
+  if (el && state.tab === "dashboard") el.outerHTML = traceDailySummaryHTML();
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest?.("[data-ai-action]");
+  if (!b) return;
+  const scopeKey = trace18.scope + "|" + trace18.eventScope;
+  if (b.dataset.aiAction === "toggle") traceAI.showInputs = !traceAI.showInputs;
+  if (b.dataset.aiAction === "refresh") {
+    delete traceAI.cache[scopeKey];
+    traceAI.showInputs = false;
+  }
+  traceRefreshDailyCard();
+});
+function traceDailySummaryHTML() {
+  const recs = traceDailyRecords();
+  const card = (body, foot = "") =>
+    `<div class="kpi-card daily-summary">${body}${foot ? `<div class="daily-foot">${foot}</div>` : ""}</div>`;
+  const shared = Boolean(window.TraceSync?.shared && window.TraceSync?.db?.());
+  if (!shared || !recs.length) return card(traceDailyInputsHTML(recs));
+  const scopeKey = trace18.scope + "|" + trace18.eventScope;
+  const sig = recs.map((r) => r.id + "@" + r.savedAt).join(",");
+  const c = traceAI.cache[scopeKey];
+  const fresh = c && c.sig === sig;
+  if (!fresh) traceAIRequest(scopeKey, sig, recs);
+  const octs = new Set(recs.map((r) => r.createdBy || r.evaluator)).size;
+  const count = `${recs.length} OC/T input${recs.length === 1 ? "" : "s"} from ${octs} OC/T${octs === 1 ? "" : "s"}`;
+  const toggle = `<button type="button" class="text-link" data-ai-action="toggle">${traceAI.showInputs ? "Show AI summary" : "Show OC/T inputs"}</button>`;
+  const refresh = `<button type="button" class="text-link" data-ai-action="refresh">Refresh</button>`;
+  const time = (iso) =>
+    new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // A summary for older inputs is still shown while the new one is written.
+  const summary = c?.result ? c : null;
+  if (traceAI.showInputs || (!summary && c?.error && fresh))
+    return card(
+      traceDailyInputsHTML(recs),
+      fresh && c?.error
+        ? `<span class="daily-error">${esc(c.error)}</span>${refresh}`
+        : `<span>Showing ${count}</span>${toggle}`,
+    );
+  if (!summary)
+    return card(
+      `<div class="kpi-label">OBSERVATIONS LAST 24 HOURS</div><p class="daily-empty daily-loading">Summarizing ${count} for the commander…</p>`,
+      toggle,
+    );
+  return card(
+    traceAISummaryBodyHTML(summary.result),
+    `<span>${fresh ? `AI summary of ${count} · ${time(summary.at)} · verify against OC/T inputs` : "Updating with new OC/T inputs…"}</span>${toggle}${fresh ? refresh : ""}`,
+  );
 }
 function renderDashboard() {
   const entries = trace18DashboardCoverage();

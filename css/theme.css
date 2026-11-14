@@ -610,6 +610,49 @@ footer {
 .daily-empty {
   margin: 6px 0 0;
 }
+.daily-tag {
+  color: #c8ae6c;
+  font-size: 9.5px;
+  letter-spacing: 0.4px;
+}
+.daily-ai {
+  margin: 4px 0 0;
+  padding-left: 17px;
+}
+.daily-ai li {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #d6e0e5;
+  margin: 0 0 8px;
+}
+.daily-ai li::marker {
+  color: #c8ae6c;
+}
+.daily-loading {
+  font-size: 12px;
+}
+.daily-foot {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #30383d;
+  font-size: 10px;
+  color: #87949c;
+}
+.daily-foot span {
+  flex: 1 1 160px;
+}
+.daily-foot .text-link {
+  font-size: 10.5px;
+  padding: 0;
+}
+.daily-error {
+  color: #e0a39e;
+}
 .mini-coverage {
   display: grid;
   grid-template-columns: 100px 1fr 34px 10px;
