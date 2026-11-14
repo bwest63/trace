@@ -15,7 +15,7 @@ On **AAR & Reports**, pick the training event and observed unit, then **Generate
 
 Before exporting, the compiled paragraphs can be reworded, switched between Sustain and Improve, reordered, left out, or supplemented with new ones. Edits are saved with the event and unit, so they carry into every export; the evaluations themselves are not changed.
 
-In shared mode, **Draft with AI** rewrites the paragraphs from every OC/T's inputs for that unit and event, keeping each sustain, improve, and set of recommendations to 6 sentences at most. See [SETUP.md](SETUP.md#optional-ai-draft-of-the-exsum-and-faar).
+In shared mode, **Draft with AI** rewrites the paragraphs from every OC/T's inputs for that unit and event, as a short, big-picture overview for brigade. See [SETUP.md](SETUP.md#optional-ai-draft-of-the-exsum-and-faar).
 
 ## Keeping the database awake
 

@@ -775,7 +775,7 @@
           }</label>`,
       ).join("")}</div><button class="secondary" id="traceRptSave">Save report details</button></details>
 <h3 class="trace-rpt-h3">Sustains &amp; improves <small>${rep.recordCount} evaluation${rep.recordCount === 1 ? "" : "s"}</small></h3>
-<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. ${aiReady() ? "<b>Draft with AI</b> rewrites them from every OC/T's inputs into 4–6 sentence paragraphs with recommendations; the compiled paragraphs are left out, not deleted. " : ""}Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p>
+<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. ${aiReady() ? "<b>Draft with AI</b> rewrites them from every OC/T's inputs into short, brigade-level paragraphs with a recommendation; the compiled paragraphs are left out, not deleted. " : ""}Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p>
 <div id="traceRptPreview">${editorHTML(rep)}</div>`;
 
       const status = (m) => (document.getElementById("traceRptStatus").textContent = lastStatus = m);
