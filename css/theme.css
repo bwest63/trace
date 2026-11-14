@@ -394,6 +394,7 @@ footer {
 }
 .dash-top-main {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-content: start;
   min-width: 0;
@@ -426,15 +427,28 @@ footer {
 .dash-top .kpi-copy em {
   font-size: 14px;
 }
+/* MET tiles always fill the space under the coverage cards: 1-3 METs share one
+   row; 4 or more use two rows, and tiles on a short last row widen to fill it. */
 .dash-top .task-grid {
-  grid-template-columns: repeat(var(--met-cols, 3), minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  --met-gap: 12px;
 }
 .dash-top .task-tile {
   padding: 14px;
+  flex: 1 1
+    calc(
+      (100% - (var(--met-cols, 3) - 1) * var(--met-gap)) / var(--met-cols, 3) -
+        0.5px
+    );
+  min-width: 0;
 }
 /* Same height as two rows of compact tiles, so the summary does not change size. */
 .dash-top .task-grid:not(.compact) .task-tile {
   min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 @media (max-width: 1250px) {
   .dash-top .task-grid:not(.compact) .task-tile {
@@ -532,8 +546,8 @@ footer {
   .dash-top {
     grid-template-columns: minmax(0, 1fr);
   }
-  .dash-top .task-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .dash-top .task-tile {
+    flex-basis: calc(50% - 6.5px);
   }
   .dash-top .kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -547,8 +561,8 @@ footer {
   }
 }
 @media (max-width: 850px) {
-  .dash-top .task-grid {
-    grid-template-columns: minmax(0, 1fr);
+  .dash-top .task-tile {
+    flex-basis: 100%;
   }
 }
 @media (max-width: 560px) {
