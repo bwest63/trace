@@ -6,7 +6,7 @@
  * soon as it notices one. Requests to other sites (the Supabase database)
  * are never cached here.
  */
-const CACHE = "trace-app-v22";
+const CACHE = "trace-app-v23";
 const APP_FILES = [
   "./index.html",
   "./manifest.webmanifest",

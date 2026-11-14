@@ -523,6 +523,7 @@
   // The FAAR discussion centers on three overarching topics (MDMP, battle
   // rhythm, sustainment critical path...). The faar-draft Edge Function picks
   // them from all OC/T inputs with AI; without it the deck keeps placeholders.
+  const MAX_TOPICS = 6;
   const TOPIC_PLACEHOLDER = (n) => ({
     name: `[Topic ${n}]`,
     definition: "[Doctrinal definition]",
@@ -553,9 +554,11 @@
     );
     // A topic's own values, with placeholders wherever it has none.
     const filled = (v) => (Array.isArray(v) ? v.some((x) => clean(x)) : Boolean(clean(v)));
-    const topics = [0, 1, 2].map((i) => {
+    // The saved or drafted topics (up to MAX_TOPICS); three placeholders without any.
+    const given = Array.isArray(aiTopics) && aiTopics.length ? aiTopics.slice(0, MAX_TOPICS) : [{}, {}, {}];
+    const topics = given.map((src, i) => {
       const t = { ...TOPIC_PLACEHOLDER(i + 1) };
-      for (const [k, v] of Object.entries(aiTopics?.[i] || {})) if (filled(v)) t[k] = v;
+      for (const [k, v] of Object.entries(src || {})) if (filled(v)) t[k] = v;
       return t;
     });
     // Doctrinal references: the topics' sources first, then the AAR page's list.
@@ -577,10 +580,6 @@
       OBSERVING_UNIT: clean(d.observingUnit) || "OC/T team",
       MISSION: clean(d.mission) || "[Unit mission]",
     };
-    topics.forEach((t, i) => {
-      data[`T${"ABC"[i]}_NAME`] = t.name;
-      data[`T${"ABC"[i]}_WHY`] = t.why;
-    });
     return {
       data,
       lists: {
@@ -596,11 +595,19 @@
         maar: orNone(lines(d.maarDeliverables).map(deliverable), "[MAAR deliverables]"),
         faar: orNone(lines(d.faarDeliverables).map((text) => ({ role: "item", text })), "[FAAR deliverables]"),
         ref: orNone(refs, "[References]"),
+        tov: topics.flatMap((t, i) => [
+          { role: "head", num: String(i + 1), name: t.name },
+          { role: "why", text: t.why },
+        ]),
+        tcm: topics.flatMap((t, i) => [
+          { role: "head", num: String(i + 1), name: t.name },
+          { role: "line" },
+        ]),
       },
       topics: topics.map((t, i) => ({
         data: {
           T_NUM: String(i + 1),
-          T_COUNT: "3",
+          T_COUNT: String(topics.length),
           T_NAME: t.name,
           T_DEF: t.definition,
           T_SRC: t.source,
@@ -769,31 +776,47 @@
   const CUSTOM = "__custom";
   const linesOf = (v) => lines(String(v ?? "").replace(/^\s*[-•*]\s*/gm, ""));
 
+  // Which topic cards are open on the AAR page (by position), and the open tab.
+  const openTopics = new Set([0]);
+  let rptTab = "topics";
+
   function topicsHTML(d) {
     const topics = Array.isArray(d.faarTopics) ? d.faarTopics : [];
-    const intro = `<h3 class="trace-rpt-h3">FAAR discussion topics</h3><p class="hint">Three overarching topics for the FAAR discussion, each with a doctrine slide and a discussion slide.${
-      aiReady() ? " Draft them with AI from every OC/T input, then edit anything before you generate the FAAR: pick another topic from the list, choose Custom topic to write your own, or change the name, definition, observations, or questions. Generate FAAR uses these; with none saved, it drafts them first." : " Choose Custom topic to write your own, and edit any field."
+    const intro = `<p class="hint">The FAAR discussion: one doctrine slide and one discussion slide per topic (up to ${MAX_TOPICS}).${
+      aiReady() ? " Draft them with AI from every OC/T input, then edit any field. Generate FAAR uses these; with none saved, it drafts them first." : ""
     }</p>`;
     if (!topics.length)
-      return `${intro}<div class="trace-rpt-actions">${aiReady() ? '<button class="secondary" data-ft="draft">Draft topics with AI</button>' : ""}<button class="secondary" data-ft="blank">Start with blank topics</button></div>`;
+      return `${intro}<div class="trace-rpt-actions">${aiReady() ? '<button class="primary" data-ft="draft">Draft topics with AI</button>' : ""}<button class="secondary" data-ft="blank">Start with blank topics</button></div>`;
     const lib = faarLibrary || [];
-    const field = (i, k, label, value, rows) =>
-      `<label class="${rows ? "wide" : ""}">${label}${
-        rows
-          ? `<textarea rows="${rows}" data-ftf="${k}" data-ti="${i}">${h(value)}</textarea>`
-          : `<input type="text" data-ftf="${k}" data-ti="${i}" value="${h(value)}">`
+    const field = (i, k, label, value, opts = {}) =>
+      `<label class="${opts.span || ""}">${label}${
+        opts.rows
+          ? `<textarea rows="${opts.rows}" data-ftf="${k}" data-ti="${i}" placeholder="${h(opts.ph || "")}">${h(value)}</textarea>`
+          : `<input type="text" data-ftf="${k}" data-ti="${i}" value="${h(value)}" placeholder="${h(opts.ph || "")}">`
       }</label>`;
-    return `${intro}${topics
-      .map((t, i) => {
-        const inLib = lib.some((x) => x.id === t.id);
-        const options = [
-          ...lib.map((x) => `<option value="${h(x.id)}" ${x.id === t.id ? "selected" : ""}>${h(x.name)}</option>`),
-          `<option value="${CUSTOM}" ${inLib ? "" : "selected"}>Custom topic (type your own)</option>`,
-        ].join("");
-        return `<div class="trace-rpt-teo trace-ft"><div class="trace-rpt-teohead"><strong>Topic ${i + 1}</strong><label class="trace-ft-pick">Start from <select data-ftf="id" data-ti="${i}">${options}</select></label></div>
-<div class="trace-rpt-fields">${field(i, "name", "Topic name", t.name)}${field(i, "source", "Source (publication and title)", t.source)}${field(i, "definition", "Doctrinal definition", t.definition, 3)}${field(i, "why", "Why we're discussing it", t.why, 2)}${field(i, "tasks", "Where OC/Ts saw it (T&EO codes, comma-separated)", (t.tasks || []).join(", "))}${field(i, "product", "Unit product to show on the slide", t.product)}${field(i, "observed", "What we observed (one per line; neutral, past tense)", (t.observed || []).join("\n"), 4)}${field(i, "q0", "Question 1: the unit explains its process", t.questions?.[0] || "")}${field(i, "q1", "Question 2: the unit examines it", t.questions?.[1] || "")}</div></div>`;
-      })
-      .join("")}<div class="trace-rpt-actions">${aiReady() ? '<button class="secondary" data-ft="draft">Redraft topics with AI</button>' : ""}<button class="secondary" data-ft="clear">Clear topics</button></div>`;
+    const card = (t, i) => {
+      const inLib = lib.some((x) => x.id === t.id);
+      const options = [
+        ...lib.map((x) => `<option value="${h(x.id)}" ${x.id === t.id ? "selected" : ""}>${h(x.name)}</option>`),
+        `<option value="${CUSTOM}" ${inLib ? "" : "selected"}>Custom topic (type your own)</option>`,
+      ].join("");
+      return `<details class="trace-ft" data-ti="${i}" ${openTopics.has(i) ? "open" : ""}><summary><span class="trace-ft-num">${i + 1}</span><b>${h(t.name || "Untitled topic")}</b><span class="trace-ft-q">${h(t.questions?.[0] || "")}</span></summary>
+<div class="trace-ft-grid">
+<label>Start from<select data-ftf="id" data-ti="${i}">${options}</select></label>
+${field(i, "name", "Topic name", t.name, { ph: "Type the topic name" })}
+${field(i, "source", "Source", t.source, { ph: "Publication and title" })}
+${field(i, "definition", "Doctrinal definition", t.definition, { rows: 2, span: "span3", ph: "Type the definition" })}
+${field(i, "why", "Why we're discussing it", t.why, { rows: 2, span: "span2" })}
+${field(i, "tasks", "Where OC/Ts saw it", (t.tasks || []).join(", "), { ph: "T&EO codes, comma-separated" })}
+${field(i, "observed", "What we observed (one per line; neutral, past tense)", (t.observed || []).join("\n"), { rows: 3, span: "span2" })}
+${field(i, "product", "Unit product on the slide", t.product, { ph: "e.g. battle rhythm" })}
+${field(i, "q0", "Question 1: the unit explains its process", t.questions?.[0] || "", { span: "span3" })}
+${field(i, "q1", "Question 2: the unit examines it", t.questions?.[1] || "", { span: "span3" })}
+</div>${topics.length > 1 ? `<div class="trace-ft-foot"><button type="button" class="secondary" data-ft="remove" data-ti="${i}">Remove topic</button></div>` : ""}</details>`;
+    };
+    return `${intro}${topics.map(card).join("")}<div class="trace-rpt-actions">${
+      topics.length < MAX_TOPICS ? '<button class="secondary" data-ft="add">＋ Add topic</button>' : ""
+    }${aiReady() ? '<button class="secondary" data-ft="draft">Redraft with AI</button>' : ""}<button class="secondary" data-ft="clear">Clear topics</button><button class="secondary" data-ft="expand">${openTopics.size ? "Collapse all" : "Expand all"}</button></div>`;
   }
 
   // Admins edit the topic library the AI chooses from.
@@ -816,6 +839,18 @@
     panel.id = "traceReports";
     // Directly under the training event picker, which these reports follow.
     sel.closest("label").insertAdjacentElement("afterend", panel);
+    // The long plain-text draft AAR below stays one click away instead of
+    // filling the page.
+    const draftText = document.getElementById("trace32AARBody");
+    if (draftText && !draftText.closest("details")) {
+      const box = document.createElement("details");
+      box.className = "trace-rpt-details";
+      box.innerHTML = "<summary>Consolidated AAR draft text (used by Export Draft AAR to Word)</summary>";
+      draftText.before(box);
+      const counts = document.getElementById("trace32AARCounts");
+      if (counts) box.append(counts);
+      box.append(draftText);
+    }
 
     let lastStatus = "";
     // Redraw after a change without losing the reader's place.
@@ -846,20 +881,26 @@
 <div class="form-grid"><label>Observed unit<select id="traceRptUnit">${unitIds
         .map((id) => `<option value="${h(id)}" ${id === reportUnit ? "selected" : ""}>${h(trace18UnitName(id))}</option>`)
         .join("")}</select></label></div>
-<div class="trace-rpt-actions"><button class="primary" id="traceRptExsum">Generate EXSUM (Word)</button><button class="primary" id="traceRptFaar">Generate FAAR (PowerPoint)</button>${aiReady() ? `<button class="secondary" id="traceRptAI">${hasAI ? "Redraft with AI" : "Draft with AI"}</button>${hasAI ? '<button class="secondary" id="traceRptAIUndo">Remove AI draft</button>' : ""}` : ""}<span id="traceRptStatus" class="hint" role="status"></span></div>
-<div id="traceFaarTopics">${topicsHTML(d)}</div>
-${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"><summary>FAAR topic library (admins): the topics the AI can choose from</summary><p class="hint">Each topic needs a name and a doctrinal definition. TRACE uses the definition and source exactly as written here; the AI never writes them. At least three topics are needed.</p><div id="traceFaarLibBody"><p class="hint">Loading…</p></div></details>' : ""}
-<details class="trace-rpt-details"><summary>Report details: CTOs, key leaders, deliverables, signature block</summary><p class="hint">${where}</p><div class="trace-rpt-fields">${FIELDS.map(
+<div class="trace-rpt-actions"><button class="primary" id="traceRptExsum">Generate EXSUM (Word)</button><button class="primary" id="traceRptFaar">Generate FAAR (PowerPoint)</button><span id="traceRptStatus" class="hint" role="status"></span></div>
+<div class="trace-rpt-tabs" role="tablist">${[
+        ["topics", "FAAR discussion topics", (d.faarTopics || []).length || ""],
+        ["paras", "EXSUM paragraphs", rep.recordCount + " eval" + (rep.recordCount === 1 ? "" : "s")],
+        ["details", "Report details", ""],
+        ...(isAdmin() && aiReady() ? [["library", "Topic library", "admins"]] : []),
+      ]
+        .map(([k, label, note]) => `<button type="button" role="tab" data-rtab="${k}" aria-selected="${rptTab === k}" class="${rptTab === k ? "on" : ""}">${label}${note !== "" ? ` <small>${h(note)}</small>` : ""}</button>`)
+        .join("")}</div>
+<div class="trace-rpt-pane" data-pane="topics" ${rptTab === "topics" ? "" : "hidden"}><div id="traceFaarTopics">${topicsHTML(d)}</div></div>
+<div class="trace-rpt-pane" data-pane="paras" ${rptTab === "paras" ? "" : "hidden"}>${aiReady() ? `<div class="trace-rpt-actions"><button class="secondary" id="traceRptAI">${hasAI ? "Redraft EXSUM paragraphs with AI" : "Draft EXSUM paragraphs with AI"}</button>${hasAI ? '<button class="secondary" id="traceRptAIUndo">Remove AI draft</button>' : ""}</div>` : ""}<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. ${aiReady() ? "<b>Draft with AI</b> rewrites them from every OC/T's inputs into short, brigade-level paragraphs with a recommendation; the compiled paragraphs are left out, not deleted. " : ""}Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. These paragraphs fill the EXSUM. ${aiReady() ? "<b>Generate FAAR</b> compiles every OC/T input for this unit and event and uses AI to build the discussion around three overarching topics, each with its doctrinal definition, a place for the unit's own product, OC/T observations, and two discussion questions for the unit. " : ""}Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p><div id="traceRptPreview">${editorHTML(rep)}</div></div>
+<div class="trace-rpt-pane" data-pane="details" ${rptTab === "details" ? "" : "hidden"}><p class="hint">${where}</p><div class="trace-rpt-fields">${FIELDS.map(
         ([k, label, type]) =>
           `<label class="${type === "textarea" ? "wide" : ""}">${h(label)}${
             type === "textarea"
               ? `<textarea rows="3" data-rpt="${k}">${h(d[k])}</textarea>`
               : `<input type="${type === "date" ? "date" : "text"}" data-rpt="${k}" value="${h(type === "date" ? d[k] || new Date().toLocaleDateString("en-CA") : d[k])}">`
           }</label>`,
-      ).join("")}</div><button class="secondary" id="traceRptSave">Save report details</button></details>
-<h3 class="trace-rpt-h3">Sustains &amp; improves <small>${rep.recordCount} evaluation${rep.recordCount === 1 ? "" : "s"}</small></h3>
-<p class="hint">Compiled from each OC/T's ODR findings, AAR development inputs, and GO / NO-GO step notes, with duplicates merged. ${aiReady() ? "<b>Draft with AI</b> rewrites them from every OC/T's inputs into short, brigade-level paragraphs with a recommendation; the compiled paragraphs are left out, not deleted. " : ""}Edit the wording, switch Sustain / Improve, reorder, leave items out, or add your own. These paragraphs fill the EXSUM. ${aiReady() ? "<b>Generate FAAR</b> compiles every OC/T input for this unit and event and uses AI to build the discussion around three overarching topics, each with its doctrinal definition, a place for the unit's own product, OC/T observations, and two discussion questions for the unit. " : ""}Changes save automatically and are used in both reports; the evaluations themselves are not changed. ${isAdmin() ? "" : "Your edits are kept on this device."}</p>
-<div id="traceRptPreview">${editorHTML(rep)}</div>`;
+      ).join("")}</div><button class="secondary" id="traceRptSave">Save report details</button></div>
+${isAdmin() && aiReady() ? `<div class="trace-rpt-pane" data-pane="library" ${rptTab === "library" ? "" : "hidden"} id="traceFaarLib"><p class="hint">The topics the AI chooses from. Each needs a name and a doctrinal definition; TRACE uses the definition and source exactly as written. Keep at least three.</p><div id="traceFaarLibBody"><p class="hint">Loading…</p></div></div>` : ""}`;
 
       const status = (m) => (document.getElementById("traceRptStatus").textContent = lastStatus = m);
       status(lastStatus);
@@ -987,7 +1028,7 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
           const saved = Array.isArray(now.details.faarTopics) ? now.details.faarTopics : [];
           if (kind === "FAAR" && saved.length) {
             topics = saved;
-            note = " Built from the FAAR discussion topics saved below.";
+            note = " Built from the saved FAAR discussion topics.";
           } else if (kind === "FAAR") {
             if (!now.observed.length) note = " No OC/T evaluations yet, so the topic slides have placeholders.";
             else if (!aiReady()) note = " AI drafting needs the shared database, so the topic slides have placeholders.";
@@ -1003,7 +1044,7 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
                 topics = res?.topics || null;
                 if (res?.library) faarLibrary = res.library;
                 if (topics?.length) saveTopics(topics);
-                note = ` Topics drafted with AI and saved below for review, from ${res.evaluations} evaluation${res.evaluations === 1 ? "" : "s"} by ${res.octs} OC/T${res.octs === 1 ? "" : "s"}: review them before the brief.`;
+                note = ` Topics drafted with AI and saved under FAAR discussion topics for review, from ${res.evaluations} evaluation${res.evaluations === 1 ? "" : "s"} by ${res.octs} OC/T${res.octs === 1 ? "" : "s"}: review them before the brief.`;
               } catch (e) {
                 note = ` ${e.message} The topic slides have placeholders.`;
               }
@@ -1094,6 +1135,19 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
         }
       };
 
+      // ---- tabs
+      panel.querySelector(".trace-rpt-tabs").addEventListener("click", (e2) => {
+        const b = e2.target.closest("[data-rtab]");
+        if (!b || b.dataset.rtab === rptTab) return;
+        rptTab = b.dataset.rtab;
+        panel.querySelectorAll("[data-rtab]").forEach((x) => {
+          x.classList.toggle("on", x === b);
+          x.setAttribute("aria-selected", String(x === b));
+        });
+        panel.querySelectorAll("[data-pane]").forEach((x) => (x.hidden = x.dataset.pane !== rptTab));
+        panel.dispatchEvent(new CustomEvent("trace-rpt-tab", { detail: rptTab }));
+      });
+
       // ---- FAAR topic review
       function saveTopics(list) {
         const where = saveDetails(ev.id, reportUnit, { ...getDetails(ev.id, reportUnit), ...values(), faarTopics: list });
@@ -1116,6 +1170,9 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
           if (res?.library) faarLibrary = res.library;
           if (!res?.topics?.length) throw Error("The AI returned no topics. Check that evaluations are saved and synced.");
           const where = saveTopics(res.topics);
+          openTopics.clear();
+          openTopics.add(0);
+          rptTab = "topics";
           redraw();
           status(`FAAR topics drafted from ${res.evaluations} evaluation${res.evaluations === 1 ? "" : "s"} by ${res.octs} OC/T${res.octs === 1 ? "" : "s"}${where === "shared" ? "" : " and saved on this device"}. Review them, then generate the FAAR.`);
         } catch (e) {
@@ -1132,14 +1189,51 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
         if (act === "blank") {
           const blank = (n) => ({ id: "", name: `[Topic ${n}]`, definition: "", source: "", why: "", tasks: [], product: "", observed: [], questions: ["", ""] });
           saveTopics([blank(1), blank(2), blank(3)]);
+          openTopics.clear();
+          openTopics.add(0);
           loadFaarLibrary(redraw);
         }
         if (act === "clear") {
           if (!confirm("Clear the FAAR discussion topics? Generate FAAR will draft new ones.")) return;
           saveTopics([]);
         }
+        if (act === "add") {
+          const list = topicsNow();
+          if (list.length >= MAX_TOPICS) return;
+          list.push({ id: "custom_" + Date.now().toString(36), name: "", definition: "", source: "", why: "", tasks: [], product: "", observed: [], questions: ["", ""] });
+          saveTopics(list);
+          openTopics.add(list.length - 1);
+          redraw();
+          panel.querySelector(`[data-ftf="name"][data-ti="${list.length - 1}"]`)?.focus();
+          return;
+        }
+        if (act === "remove") {
+          const list = topicsNow();
+          const i = +b.dataset.ti;
+          if (!confirm(`Remove topic ${i + 1}${list[i]?.name ? ` (${list[i].name})` : ""} from the FAAR?`)) return;
+          list.splice(i, 1);
+          saveTopics(list);
+          const next = [...openTopics].filter((x) => x !== i).map((x) => (x > i ? x - 1 : x));
+          openTopics.clear();
+          next.forEach((x) => openTopics.add(x));
+        }
+        if (act === "expand") {
+          const n = topicsNow().length;
+          if (openTopics.size) openTopics.clear();
+          else for (let i = 0; i < n; i++) openTopics.add(i);
+        }
         redraw();
       });
+      topicBox.addEventListener(
+        "toggle",
+        (e2) => {
+          const det = e2.target.closest?.("details.trace-ft");
+          if (!det) return;
+          if (det.open) openTopics.add(+det.dataset.ti);
+          else openTopics.delete(+det.dataset.ti);
+        },
+        true,
+      );
       topicBox.addEventListener("change", (e2) => {
         const el = e2.target.closest("[data-ftf]");
         if (!el) return;
@@ -1150,7 +1244,7 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
         if (k === "id" && el.value === CUSTOM) {
           // Keeps whatever is in the fields, now as the OC/T's own topic.
           t.id = "custom_" + Date.now().toString(36);
-          if (/^\[Topic \d\]$/.test(t.name || "")) t.name = "";
+          Object.assign(t, { name: "", definition: "", source: "" });
         } else if (k === "id") {
           const x = (faarLibrary || []).find((y) => y.id === el.value);
           if (!x) return;
@@ -1168,7 +1262,12 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
           t.questions[k === "q0" ? 0 : 1] = clean(el.value);
         } else t[k] = clean(el.value);
         const where = saveTopics(list);
-        if (k === "id" || ((k === "name" || k === "definition" || k === "source") && !(faarLibrary || []).some((y) => y.id === t.id))) redraw();
+        if (k === "id" || ((k === "name" || k === "definition" || k === "source") && !(faarLibrary || []).some((y) => y.id === t.id))) {
+          openTopics.add(+el.dataset.ti);
+          redraw();
+          if (k === "id" && el.value === CUSTOM)
+            panel.querySelector(`[data-ftf="name"][data-ti="${el.dataset.ti}"]`)?.focus();
+        }
         status(where === "shared" ? "FAAR topics saved." : "FAAR topics saved on this device.");
       });
       if ((getDetails(ev.id, reportUnit).faarTopics || []).length && !faarLibrary) loadFaarLibrary(redraw);
@@ -1201,7 +1300,8 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
           }
           libDraw();
         };
-        libBox.addEventListener("toggle", () => libBox.open && !libList && libLoad());
+        if (rptTab === "library") libLoad();
+        panel.addEventListener("trace-rpt-tab", (e2) => e2.detail === "library" && !libList && libLoad());
         libBox.addEventListener("click", async (e2) => {
           const b = e2.target.closest("[data-lib]");
           if (!b) return;
@@ -1283,6 +1383,25 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
 .trace-rpt-tag{font-size:11px;color:#c7a458;font-weight:600}
 .trace-rpt-tools{margin-left:auto;display:flex;gap:6px}
 .trace-rpt-tools button{padding:3px 9px;font-size:12px}
+.trace-rpt-tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid #40515b;margin:14px 0 10px}
+.trace-rpt-tabs button{background:transparent;border:0;border-bottom:3px solid transparent;color:#a9bdc8;padding:9px 14px;font-weight:700;font-size:13px;cursor:pointer;border-radius:0}
+.trace-rpt-tabs button.on{color:#e6c274;border-bottom-color:#c7a458}
+.trace-rpt-tabs small{font-weight:400;color:#8fa0a9;margin-left:4px}
+details.trace-ft{border:1px solid #40515b;border-radius:10px;margin:8px 0;background:#18242b}
+details.trace-ft>summary{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;list-style:none}
+details.trace-ft>summary::-webkit-details-marker{display:none}
+details.trace-ft>summary::after{content:"▸";margin-left:auto;color:#c7a458}
+details.trace-ft[open]>summary::after{content:"▾"}
+.trace-ft-num{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#c7a458;color:#10161a;font-weight:800;font-size:12px;flex:none}
+.trace-ft-q{color:#a9bdc8;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.trace-ft-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 12px;padding:2px 14px 12px}
+.trace-ft-grid label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#a9bdc8}
+.trace-ft-grid input,.trace-ft-grid select,.trace-ft-grid textarea{width:100%;box-sizing:border-box;font-size:13px}
+.trace-ft-grid textarea{resize:vertical;line-height:1.4}
+.trace-ft-grid .span2{grid-column:span 2}.trace-ft-grid .span3{grid-column:1/-1}
+.trace-ft-foot{display:flex;justify-content:flex-end;padding:0 14px 12px}
+.trace-ft-foot button{font-size:12px;padding:5px 10px}
+@media (max-width:900px){.trace-ft-grid{grid-template-columns:minmax(0,1fr)}.trace-ft-grid .span2{grid-column:auto}}
 .trace-ft .trace-rpt-fields{margin:6px 0 0}
 .trace-ft .trace-rpt-fields label:has([data-ftf=q0]),.trace-ft .trace-rpt-fields label:has([data-ftf=q1]){grid-column:1/-1}
 .trace-ft-pick{display:flex;align-items:center;gap:8px;font-size:13px}

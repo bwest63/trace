@@ -167,7 +167,7 @@ text(s, M, Inches(5.15), Inches(11.5), Inches(0.5),
 s = base("Agenda")
 text(s, M + Inches(0.2), TOP + Inches(0.2), Inches(10), Inches(5), bullets([
     "Purpose and rules of the AAR", "Mission, METs, & CTOs", "MAAR and FAAR deliverables",
-    "AAR discussion: three overarching topics", "Unit commitments", "Heroes of the battle",
+    "AAR discussion: overarching topics", "Unit commitments", "Heroes of the battle",
     "Closing remarks and doctrinal references"], size=22, gap=14))
 
 # 3 Purpose
@@ -218,15 +218,14 @@ text(s, M + Inches(0.2), TOP + Inches(0.2), Inches(11), Inches(5),
 # 8 Divider
 title_slide("PART 2", "AAR DISCUSSION")
 
-# 9 Three topics
-s = base("Three Overarching Topics")
-text(s, M, TOP + Inches(0.05), CW, Inches(0.6), [(
+# 9 Topics overview (any number of topics)
+s = base("Overarching Topics")
+text(s, M, TOP + Inches(0.05), CW, Inches(0.5), [(
     "Processes that cut across every MET, not single events or steps, chosen from the trends in OC/T observations.",
-    17, INK, BFONT, False)])
-cards_row(s, Inches(2.35), Inches(4.0), [
-    [(str(i + 1), 30, GOLD_INK, HFONT, True), (f"{{{{T{k}_NAME}}}}", 22, INK, HFONT, True, {"space_before": 6}),
-     (f"{{{{T{k}_WHY}}}}", 14, INK, BFONT, False, {"space_before": 10, "line": 1.2})]
-    for i, k in enumerate("ABC")])
+    16, MUTED, BFONT, False)])
+text(s, M, TOP + Inches(0.65), CW, BOTTOM - TOP - Inches(0.7), [
+    ("{{SEQ:tov:head}}{{.num}}.  {{.name}}", 20, INK, HFONT, True, {"space_before": 10}),
+    ("{{SEQ:tov:why}}{{.text}}", 14, INK, BFONT, False, {"space_before": 2, "line": 1.15})])
 
 # 10-11 Topic pattern (repeated per topic): doctrine, then discussion
 s = base("{{T_NAME}}", "TOPIC {{T_NUM}} OF {{T_COUNT}} · DOCTRINE")
@@ -261,25 +260,14 @@ text(s, M, Inches(6.55), CW, Inches(0.35), [(
     "Owner (unit decides): ______________________     Action: ______________________     Suspense: __________",
     12, MUTED, BFONT, False)])
 
-# 12 Commitments
+# 12 Commitments (one block per topic)
 s = base("Unit Commitments")
-widths = [Inches(3.3), Inches(4.9), Inches(2.4), Inches(1.53)]
-heads = ["TOPIC", "WHAT THE UNIT WILL DO", "OWNER (UNIT DECIDES)", "SUSPENSE"]
-y = TOP + Inches(0.1)
-for r in range(4):
-    x = M
-    rh = Inches(0.5) if r == 0 else Inches(0.8)
-    for c, wv in enumerate(widths):
-        rect(s, x, y, wv - Inches(0.04), rh - Inches(0.04), NIGHT if r == 0 else CARD)
-        t = heads[c] if r == 0 else (f"{{{{T{'ABC'[r - 1]}_NAME}}}}" if c == 0 else "")
-        if t:
-            text(s, x + Inches(0.12), y, wv - Inches(0.3), rh - Inches(0.04),
-                 [(t, 14 if r == 0 else 16, CALLOUT if r == 0 else INK, HFONT if r == 0 else BFONT, r == 0)],
-                 anchor=MSO_ANCHOR.MIDDLE)
-        x += wv
-    y += rh
-text(s, M, y + Inches(0.2), CW, Inches(0.4),
-     [("Captured in the unit's words during the discussion.", 13, MUTED, BFONT, False)])
+text(s, M, TOP + Inches(0.05), CW, Inches(0.4),
+     [("Captured in the unit's words during the discussion.", 14, MUTED, BFONT, False)])
+text(s, M, TOP + Inches(0.55), CW, BOTTOM - TOP - Inches(0.6), [
+    ("{{SEQ:tcm:head}}{{.num}}.  {{.name}}", 19, INK, HFONT, True, {"space_before": 12}),
+    ("{{SEQ:tcm:line}}What the unit will do: ______________________________    "
+     "Owner (unit decides): ________________    Suspense: __________", 13, MUTED, BFONT, False, {"space_before": 4})])
 
 # 13 Heroes
 s = base("Heroes of the Battle")
