@@ -31,9 +31,13 @@ const reply = (body: unknown, status = 200) =>
 const clean = (s: unknown) => String(s ?? "").replace(/\s+/g, " ").trim();
 const clip = (s: unknown, n = MAX_FIELD) => clean(s).slice(0, n);
 
-// Overarching topics the FAAR can discuss. Definitions are quoted from
+// Overarching topics the FAAR can discuss: the built-in library. Admins can
+// replace it on TRACE's AAR page; their list is kept in trace_settings
+// (key "faar_topic_library") and used instead. Definitions are quoted from
 // doctrine; check them against the current editions when doctrine changes.
-const TOPICS: Record<string, { name: string; definition: string; source: string; covers: string }> = {
+type Topic = { name: string; definition: string; source: string; covers: string };
+const LIBRARY_KEY = "faar_topic_library";
+const TOPICS: Record<string, Topic> = {
   operations_process: {
     name: "The Operations Process",
     definition:
@@ -115,6 +119,27 @@ Rules:
 
 Respond with only a JSON object: {"topics": [{"id": "...", "why": "...", "tasks": ["..."], "product": "...", "observed": ["..."], "questions": ["...", "..."]}]}`;
 
+// The admins' topic library if one is saved and valid, else the built-in one.
+async function loadLibrary(): Promise<Record<string, Topic>> {
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!key) return TOPICS;
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, key);
+  const { data } = await admin.from("trace_settings").select("value").eq("key", LIBRARY_KEY).maybeSingle();
+  const out: Record<string, Topic> = {};
+  for (const t of Array.isArray(data?.value?.topics) ? data.value.topics : []) {
+    const id = clip(t?.id, 60).toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+    const topic = {
+      name: clip(t?.name, 80),
+      definition: clip(t?.definition, 600),
+      source: clip(t?.source, 160),
+      covers: clip(t?.covers, 300),
+    };
+    if (id && topic.name && topic.definition && !out[id]) out[id] = topic;
+  }
+  return Object.keys(out).length >= 3 ? out : TOPICS;
+}
+const libraryList = (lib: Record<string, Topic>) => Object.entries(lib).map(([id, t]) => ({ id, ...t }));
+
 // steps[i] is the app's label for measure i, e.g. "3. Conduct convoy briefs".
 type TaskLabel = { code?: string; title?: string; steps?: string[] };
 
@@ -186,10 +211,19 @@ Deno.serve(async (req) => {
       503,
     );
 
-  let params: { eventId?: string; unitId?: string; unitName?: string; tasks?: Record<string, TaskLabel> } = {};
+  let params: {
+    eventId?: string;
+    unitId?: string;
+    unitName?: string;
+    libraryOnly?: boolean;
+    tasks?: Record<string, TaskLabel>;
+  } = {};
   try {
     params = await req.json();
   } catch (_) { /* checked below */ }
+  const LIB = await loadLibrary();
+  // The topic list the app shows when an OC/T swaps a topic.
+  if (params.libraryOnly) return reply({ library: libraryList(LIB) });
   const eventId = clip(params.eventId, 200);
   const unitId = clip(params.unitId, 200);
   const labels = params.tasks || {};
@@ -227,12 +261,18 @@ Deno.serve(async (req) => {
     .filter((g) => g.inputs.length);
   const all = [...byTask.values()].flat();
   if (!groups.length)
-    return reply({ topics: [], evaluations: all.length, octs: 0, generatedAt: new Date().toISOString() });
+    return reply({
+      topics: [],
+      library: libraryList(LIB),
+      evaluations: all.length,
+      octs: 0,
+      generatedAt: new Date().toISOString(),
+    });
   // Keep the request a reasonable size: share the entry budget across tasks.
   const per = Math.max(10, Math.floor(MAX_ENTRIES / groups.length));
   for (const g of groups) g.inputs = g.inputs.slice(0, per);
 
-  const library = Object.entries(TOPICS).map(([id, t]) => ({ id, name: t.name, covers: t.covers }));
+  const library = Object.entries(LIB).map(([id, t]) => ({ id, name: t.name, covers: t.covers }));
   const ai = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -277,16 +317,16 @@ Deno.serve(async (req) => {
   const seen = new Set<string>();
   const codes = new Set(groups.map((g) => g.code));
   const topics = (Array.isArray(out.topics) ? out.topics : [])
-    .filter((t: any) => TOPICS[t?.id] && !seen.has(t.id) && seen.add(t.id))
+    .filter((t: any) => LIB[t?.id] && !seen.has(t.id) && seen.add(t.id))
     .slice(0, 3)
     .map((t: any) => ({
       id: t.id,
-      name: TOPICS[t.id].name,
-      definition: TOPICS[t.id].definition,
-      source: TOPICS[t.id].source,
+      name: LIB[t.id].name,
+      definition: LIB[t.id].definition,
+      source: LIB[t.id].source,
       why: clip(t.why, 400),
       tasks: list(t.tasks, 6).filter((c) => codes.has(c)),
-      product: clip(t.product, 80) || TOPICS[t.id].name.toLowerCase(),
+      product: clip(t.product, 80) || LIB[t.id].name.toLowerCase(),
       observed: list(t.observed, 4),
       questions: list(t.questions, 2),
     }));
@@ -294,6 +334,7 @@ Deno.serve(async (req) => {
 
   return reply({
     topics,
+    library: libraryList(LIB),
     evaluations: all.length,
     octs: new Set(all.map((r) => r.evaluator || "OC/T")).size,
     generatedAt: new Date().toISOString(),

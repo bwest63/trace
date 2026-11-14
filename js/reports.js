@@ -551,7 +551,13 @@
     const mets = (rep.teos.some((t) => t.assigned) ? rep.teos.filter((t) => t.assigned) : rep.observed).map(
       (t) => ({ role: "item", code: t.code, title: t.title }),
     );
-    const topics = [0, 1, 2].map((i) => ({ ...TOPIC_PLACEHOLDER(i + 1), ...(aiTopics?.[i] || {}) }));
+    // A topic's own values, with placeholders wherever it has none.
+    const filled = (v) => (Array.isArray(v) ? v.some((x) => clean(x)) : Boolean(clean(v)));
+    const topics = [0, 1, 2].map((i) => {
+      const t = { ...TOPIC_PLACEHOLDER(i + 1) };
+      for (const [k, v] of Object.entries(aiTopics?.[i] || {})) if (filled(v)) t[k] = v;
+      return t;
+    });
     // Doctrinal references: the topics' sources first, then the AAR page's list.
     const refs = [],
       seen = new Set();
@@ -740,6 +746,67 @@
       .join("");
   }
 
+  /* ------------------------------------------------- FAAR topic review */
+
+  // The topic library (from the faar-draft function: the admins' list, or the
+  // built-in one). Loaded once per page, when the AAR page first needs it.
+  const LIBRARY_KEY = "faar_topic_library";
+  let faarLibrary = null,
+    faarLibraryLoading = null;
+  function loadFaarLibrary(onReady) {
+    if (faarLibrary || !aiReady()) return;
+    faarLibraryLoading ||= window.TraceSync.db()
+      .functions.invoke("faar-draft", { body: { libraryOnly: true } })
+      .then(({ data }) => {
+        faarLibrary = Array.isArray(data?.library) ? data.library : [];
+      })
+      .catch(() => (faarLibrary = []))
+      .finally(() => {
+        faarLibraryLoading = null;
+        onReady?.();
+      });
+  }
+  const linesOf = (v) => lines(String(v ?? "").replace(/^\s*[-•*]\s*/gm, ""));
+
+  function topicsHTML(d) {
+    const topics = Array.isArray(d.faarTopics) ? d.faarTopics : [];
+    const intro = `<h3 class="trace-rpt-h3">FAAR discussion topics</h3><p class="hint">Three overarching topics for the FAAR discussion, each with a doctrine slide and a discussion slide.${
+      aiReady() ? " Draft them with AI from every OC/T input, then swap a topic, reword a question, or edit the observations before you generate the FAAR. Generate FAAR uses these; with none saved, it drafts them first." : ""
+    }</p>`;
+    if (!topics.length)
+      return `${intro}<div class="trace-rpt-actions">${aiReady() ? '<button class="secondary" data-ft="draft">Draft topics with AI</button>' : ""}<button class="secondary" data-ft="blank">Start with blank topics</button></div>`;
+    const lib = faarLibrary || [];
+    const field = (i, k, label, value, rows) =>
+      `<label class="${rows ? "wide" : ""}">${label}${
+        rows
+          ? `<textarea rows="${rows}" data-ftf="${k}" data-ti="${i}">${h(value)}</textarea>`
+          : `<input type="text" data-ftf="${k}" data-ti="${i}" value="${h(value)}">`
+      }</label>`;
+    return `${intro}${topics
+      .map((t, i) => {
+        const inLib = lib.some((x) => x.id === t.id);
+        const options = [
+          ...(inLib ? [] : [`<option value="${h(t.id || "")}" selected>${h(t.name || "Choose a topic")}</option>`]),
+          ...lib.map((x) => `<option value="${h(x.id)}" ${x.id === t.id ? "selected" : ""}>${h(x.name)}</option>`),
+        ].join("");
+        return `<div class="trace-rpt-teo trace-ft"><div class="trace-rpt-teohead"><strong>Topic ${i + 1}</strong><label class="trace-ft-pick">Topic <select data-ftf="id" data-ti="${i}" ${lib.length ? "" : "disabled"}>${options}</select></label></div>
+<p class="trace-ft-def">${h(t.definition || "No definition yet.")} <small>${h(t.source || "")}</small></p>
+<div class="trace-rpt-fields">${field(i, "why", "Why we're discussing it", t.why, 2)}${field(i, "tasks", "Where OC/Ts saw it (T&EO codes, comma-separated)", (t.tasks || []).join(", "))}${field(i, "product", "Unit product to show on the slide", t.product)}${field(i, "observed", "What we observed (one per line; neutral, past tense)", (t.observed || []).join("\n"), 4)}${field(i, "q0", "Question 1: the unit explains its process", t.questions?.[0] || "")}${field(i, "q1", "Question 2: the unit examines it", t.questions?.[1] || "")}</div></div>`;
+      })
+      .join("")}<div class="trace-rpt-actions">${aiReady() ? '<button class="secondary" data-ft="draft">Redraft topics with AI</button>' : ""}<button class="secondary" data-ft="clear">Clear topics</button></div>`;
+  }
+
+  // Admins edit the topic library the AI chooses from.
+  function libraryEditorHTML(list) {
+    const row = (t, i) => `<div class="trace-rpt-item" data-li="${i}">
+<div class="trace-rpt-itembar"><b>${h(t.name || "New topic")}</b><span class="trace-rpt-tools"><button type="button" class="secondary" data-lib="remove" data-li="${i}">Remove</button></span></div>
+<label>Name<input type="text" data-lf="name" value="${h(t.name)}"></label>
+<label>Doctrinal definition<textarea rows="2" data-lf="definition">${h(t.definition)}</textarea></label>
+<label>Source (publication and title)<input type="text" data-lf="source" value="${h(t.source)}"></label>
+<label>What it covers (helps the AI recognize it in OC/T inputs)<input type="text" data-lf="covers" value="${h(t.covers)}"></label></div>`;
+    return `${list.map(row).join("")}<div class="trace-rpt-actions"><button type="button" class="secondary" data-lib="add">＋ Add topic</button><button type="button" class="primary" data-lib="save">Save topic library</button><button type="button" class="secondary" data-lib="reset">Reset to built-in topics</button><span class="hint" id="traceLibStatus" role="status"></span></div>`;
+  }
+
   function mountReports() {
     const sel = document.getElementById("trace32AAREvent");
     const shell = document.querySelector("#content .dash-shell");
@@ -780,6 +847,8 @@
         .map((id) => `<option value="${h(id)}" ${id === reportUnit ? "selected" : ""}>${h(trace18UnitName(id))}</option>`)
         .join("")}</select></label></div>
 <div class="trace-rpt-actions"><button class="primary" id="traceRptExsum">Generate EXSUM (Word)</button><button class="primary" id="traceRptFaar">Generate FAAR (PowerPoint)</button>${aiReady() ? `<button class="secondary" id="traceRptAI">${hasAI ? "Redraft with AI" : "Draft with AI"}</button>${hasAI ? '<button class="secondary" id="traceRptAIUndo">Remove AI draft</button>' : ""}` : ""}<span id="traceRptStatus" class="hint" role="status"></span></div>
+<div id="traceFaarTopics">${topicsHTML(d)}</div>
+${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"><summary>FAAR topic library (admins): the topics the AI can choose from</summary><p class="hint">Each topic needs a name and a doctrinal definition. TRACE uses the definition and source exactly as written here; the AI never writes them. At least three topics are needed.</p><div id="traceFaarLibBody"><p class="hint">Loading…</p></div></details>' : ""}
 <details class="trace-rpt-details"><summary>Report details: CTOs, key leaders, deliverables, signature block</summary><p class="hint">${where}</p><div class="trace-rpt-fields">${FIELDS.map(
         ([k, label, type]) =>
           `<label class="${type === "textarea" ? "wide" : ""}">${h(label)}${
@@ -805,7 +874,7 @@
         draw();
       };
       document.getElementById("traceRptSave").onclick = () => {
-        const where = saveDetails(ev.id, reportUnit, { ...values(), edits: getDetails(ev.id, reportUnit).edits });
+        const where = saveDetails(ev.id, reportUnit, { ...getDetails(ev.id, reportUnit), ...values() });
         redraw();
         status(where === "shared" ? "Report details saved." : "Report details saved on this device.");
       };
@@ -912,10 +981,14 @@
         status(`Building ${kind}…`);
         try {
           const now = compileReport(ev.id, reportUnit);
-          now.details = { ...DEFAULTS, ...values(), edits: now.details.edits };
+          now.details = { ...now.details, ...values() };
           let note = "";
           let topics = null;
-          if (kind === "FAAR") {
+          const saved = Array.isArray(now.details.faarTopics) ? now.details.faarTopics : [];
+          if (kind === "FAAR" && saved.length) {
+            topics = saved;
+            note = " Built from the FAAR discussion topics saved below.";
+          } else if (kind === "FAAR") {
             if (!now.observed.length) note = " No OC/T evaluations yet, so the topic slides have placeholders.";
             else if (!aiReady()) note = " AI drafting needs the shared database, so the topic slides have placeholders.";
             else
@@ -928,7 +1001,9 @@
                   tasks: taskLabels(now.observed),
                 });
                 topics = res?.topics || null;
-                note = ` Topics drafted with AI from ${res.evaluations} evaluation${res.evaluations === 1 ? "" : "s"} by ${res.octs} OC/T${res.octs === 1 ? "" : "s"}: review them before the brief.`;
+                if (res?.library) faarLibrary = res.library;
+                if (topics?.length) saveTopics(topics);
+                note = ` Topics drafted with AI and saved below for review, from ${res.evaluations} evaluation${res.evaluations === 1 ? "" : "s"} by ${res.octs} OC/T${res.octs === 1 ? "" : "s"}: review them before the brief.`;
               } catch (e) {
                 note = ` ${e.message} The topic slides have placeholders.`;
               }
@@ -1019,6 +1094,146 @@
         }
       };
 
+      // ---- FAAR topic review
+      function saveTopics(list) {
+        const where = saveDetails(ev.id, reportUnit, { ...getDetails(ev.id, reportUnit), ...values(), faarTopics: list });
+        return where;
+      }
+      const topicBox = document.getElementById("traceFaarTopics");
+      const topicsNow = () => JSON.parse(JSON.stringify(getDetails(ev.id, reportUnit).faarTopics || []));
+      const draftTopics = async (button) => {
+        if (!rep.observed.length) return status("No saved evaluations to draft FAAR topics from.");
+        if (topicsNow().length && !confirm("Replace the saved FAAR topics with a new AI draft? Your edits to them will be lost.")) return;
+        button.disabled = true;
+        status("Compiling every OC/T input and drafting the FAAR topics with AI… this can take a minute.");
+        try {
+          const res = await invokeAI("faar-draft", {
+            eventId: ev.id,
+            unitId: reportUnit,
+            unitName: rep.unit?.name || "",
+            tasks: taskLabels(rep.observed),
+          });
+          if (res?.library) faarLibrary = res.library;
+          if (!res?.topics?.length) throw Error("The AI returned no topics. Check that evaluations are saved and synced.");
+          const where = saveTopics(res.topics);
+          redraw();
+          status(`FAAR topics drafted from ${res.evaluations} evaluation${res.evaluations === 1 ? "" : "s"} by ${res.octs} OC/T${res.octs === 1 ? "" : "s"}${where === "shared" ? "" : " and saved on this device"}. Review them, then generate the FAAR.`);
+        } catch (e) {
+          status(e.message || "AI drafting failed.");
+        } finally {
+          button.disabled = false;
+        }
+      };
+      topicBox.addEventListener("click", (e2) => {
+        const b = e2.target.closest("[data-ft]");
+        if (!b) return;
+        const act = b.dataset.ft;
+        if (act === "draft") return draftTopics(b);
+        if (act === "blank") {
+          const blank = (n) => ({ id: "", name: `[Topic ${n}]`, definition: "", source: "", why: "", tasks: [], product: "", observed: [], questions: ["", ""] });
+          saveTopics([blank(1), blank(2), blank(3)]);
+          loadFaarLibrary(redraw);
+        }
+        if (act === "clear") {
+          if (!confirm("Clear the FAAR discussion topics? Generate FAAR will draft new ones.")) return;
+          saveTopics([]);
+        }
+        redraw();
+      });
+      topicBox.addEventListener("change", (e2) => {
+        const el = e2.target.closest("[data-ftf]");
+        if (!el) return;
+        const list = topicsNow();
+        const t = list[+el.dataset.ti];
+        if (!t) return;
+        const k = el.dataset.ftf;
+        if (k === "id") {
+          const x = (faarLibrary || []).find((y) => y.id === el.value);
+          if (!x) return;
+          Object.assign(t, { id: x.id, name: x.name, definition: x.definition, source: x.source });
+          if (!t.product) t.product = x.name.toLowerCase();
+        } else if (k === "tasks") t.tasks = el.value.split(",").map(clean).filter(Boolean);
+        else if (k === "observed") t.observed = linesOf(el.value);
+        else if (k === "q0" || k === "q1") {
+          t.questions = [...(t.questions || ["", ""])];
+          t.questions[k === "q0" ? 0 : 1] = clean(el.value);
+        } else t[k] = clean(el.value);
+        const where = saveTopics(list);
+        if (k === "id") redraw();
+        status(where === "shared" ? "FAAR topics saved." : "FAAR topics saved on this device.");
+      });
+      if ((getDetails(ev.id, reportUnit).faarTopics || []).length && !faarLibrary) loadFaarLibrary(redraw);
+
+      // ---- topic library (admins)
+      const libBox = document.getElementById("traceFaarLib");
+      if (libBox) {
+        let libList = null;
+        const libStatus = (m) => {
+          const el = document.getElementById("traceLibStatus");
+          if (el) el.textContent = m;
+        };
+        const libDraw = () => {
+          document.getElementById("traceFaarLibBody").innerHTML = libraryEditorHTML(libList);
+        };
+        const readRows = () =>
+          [...libBox.querySelectorAll("[data-li]")]
+            .filter((el) => el.classList.contains("trace-rpt-item"))
+            .map((el, i) => {
+              const v = (k) => clean(el.querySelector(`[data-lf="${k}"]`)?.value);
+              return { id: libList[i]?.id || "", name: v("name"), definition: v("definition"), source: v("source"), covers: v("covers") };
+            });
+        const libLoad = async () => {
+          const { data } = await window.TraceSync.db().from("trace_settings").select("value").eq("key", LIBRARY_KEY).maybeSingle();
+          if (Array.isArray(data?.value?.topics)) libList = data.value.topics;
+          else {
+            faarLibrary = null;
+            await new Promise((r) => loadFaarLibrary(r));
+            libList = JSON.parse(JSON.stringify(faarLibrary || []));
+          }
+          libDraw();
+        };
+        libBox.addEventListener("toggle", () => libBox.open && !libList && libLoad());
+        libBox.addEventListener("click", async (e2) => {
+          const b = e2.target.closest("[data-lib]");
+          if (!b) return;
+          const act = b.dataset.lib;
+          if (act === "add") {
+            libList = [...readRows(), { id: "", name: "", definition: "", source: "", covers: "" }];
+            return libDraw();
+          }
+          if (act === "remove") {
+            libList = readRows().filter((_, i) => i !== +b.dataset.li);
+            return libDraw();
+          }
+          if (act === "reset") {
+            if (!confirm("Go back to TRACE's built-in topic library? Your custom topics will be removed.")) return;
+            const { error } = await window.TraceSync.db().from("trace_settings").delete().eq("key", LIBRARY_KEY);
+            if (error) return libStatus("Could not reset: " + error.message);
+            faarLibrary = libList = null;
+            await libLoad();
+            return libStatus("Built-in topic library restored.");
+          }
+          if (act === "save") {
+            const rows = readRows().filter((t) => t.name || t.definition);
+            if (rows.some((t) => !t.name || !t.definition)) return libStatus("Every topic needs a name and a definition.");
+            if (rows.length < 3) return libStatus("Keep at least three topics.");
+            const used = new Set();
+            const topics = rows.map((t) => {
+              let id = t.id || t.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "topic";
+              while (used.has(id)) id += "_2";
+              used.add(id);
+              return { ...t, id };
+            });
+            const { error } = await window.TraceSync.db().from("trace_settings").upsert({ key: LIBRARY_KEY, value: { topics } });
+            if (error) return libStatus("Could not save: " + error.message);
+            libList = topics;
+            faarLibrary = topics.map(({ id, name, definition, source, covers }) => ({ id, name, definition, source, covers }));
+            libDraw();
+            libStatus("Topic library saved. The AI chooses from these topics from now on.");
+          }
+        });
+      }
+
       document.getElementById("traceRptExsum").onclick = (e) => generate("EXSUM", e.target);
       document.getElementById("traceRptFaar").onclick = (e) => generate("FAAR", e.target);
     };
@@ -1059,6 +1274,13 @@
 .trace-rpt-tag{font-size:11px;color:#c7a458;font-weight:600}
 .trace-rpt-tools{margin-left:auto;display:flex;gap:6px}
 .trace-rpt-tools button{padding:3px 9px;font-size:12px}
+.trace-ft .trace-rpt-fields{margin:6px 0 0}
+.trace-ft .trace-rpt-fields label:has([data-ftf=q0]),.trace-ft .trace-rpt-fields label:has([data-ftf=q1]){grid-column:1/-1}
+.trace-ft-pick{display:flex;align-items:center;gap:8px;font-size:13px}
+.trace-ft-pick select{min-width:240px}
+.trace-ft-def{margin:6px 0;font-size:13px;color:#c9d5db;line-height:1.45}
+.trace-ft-def small{color:#a9bdc8}
+#traceFaarLib .trace-rpt-item label input,#traceFaarLib .trace-rpt-item label textarea{width:100%;box-sizing:border-box}
 `;
   document.head.appendChild(css);
 

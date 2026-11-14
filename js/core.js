@@ -599,8 +599,11 @@ function traceDailyEvent() {
     ? null
     : trace18.events.find((e) => e.id === trace18.eventScope) || null;
 }
+// An admin's edit stays up for 24 hours, even when new OC/T inputs arrive
+// (the card then says so and offers the AI summary).
 function traceDailyEdit() {
-  return traceDailyEvent()?.dailySummary?.[trace18.scope] || null;
+  const e = traceDailyEvent()?.dailySummary?.[trace18.scope];
+  return e && Date.now() - Date.parse(e.at || 0) < 24 * 60 * 60 * 1000 ? e : null;
 }
 const traceDailyLines = (v) =>
   String(v || "")
@@ -642,11 +645,15 @@ document.addEventListener("click", (e) => {
     traceAI.showInputs = false;
   }
   if (act === "cancel") traceAI.editing = null;
-  if (act === "save" || act === "undo") {
+  if (act === "save" || act === "undo" || act === "reviewed") {
     const ev = traceDailyEvent();
     if (!ev || !window.TraceSync?.isAdmin) return;
     const all = { ...(ev.dailySummary || {}) };
-    if (act === "undo") {
+    if (act === "reviewed") {
+      const shown = traceDailyShown();
+      if (!all[trace18.scope] || !shown) return;
+      all[trace18.scope] = { ...all[trace18.scope], sig: shown.sig };
+    } else if (act === "undo") {
       if (!confirm("Go back to the AI summary? Your edits will be removed for everyone.")) return;
       delete all[trace18.scope];
     } else {
@@ -670,7 +677,7 @@ function traceDailyShown() {
   const recs = traceDailyRecords();
   const sig = recs.map((r) => r.id + "@" + r.savedAt).join(",");
   const edit = traceDailyEdit();
-  if (edit && edit.sig === sig) return { sig, result: edit, edited: true };
+  if (edit) return { sig, result: edit, edited: true };
   const c = traceAI.cache[trace18.scope + "|" + trace18.eventScope];
   if (c?.result && c.sig === sig) return { sig, result: c.result, at: c.at };
   return null;
@@ -684,10 +691,12 @@ function traceDailySummaryHTML() {
   const scopeKey = trace18.scope + "|" + trace18.eventScope;
   const sig = recs.map((r) => r.id + "@" + r.savedAt).join(",");
   const edit = traceDailyEdit();
-  const edited = edit && edit.sig === sig ? edit : null;
+  const edited = edit || null;
+  // New OC/T inputs since the admin's edit.
+  const stale = Boolean(edited && edited.sig !== sig);
   const c = traceAI.cache[scopeKey];
   const fresh = c && c.sig === sig;
-  if (!fresh && !edited) traceAIRequest(scopeKey, sig, recs);
+  if (!fresh && (!edited || stale)) traceAIRequest(scopeKey, sig, recs);
   const octs = new Set(recs.map((r) => r.createdBy || r.evaluator)).size;
   const count = `${recs.length} OC/T input${recs.length === 1 ? "" : "s"} from ${octs} OC/T${octs === 1 ? "" : "s"}`;
   const toggle = `<button type="button" class="text-link" data-ai-action="toggle">${traceAI.showInputs ? "Show summary" : "Show OC/T inputs"}</button>`;
@@ -708,7 +717,7 @@ function traceDailySummaryHTML() {
   if (edited && !traceAI.showInputs)
     return card(
       traceAISummaryBodyHTML(edited),
-      `<span>Summary of ${count} · edited by ${esc(edited.by || "an admin")} ${time(edited.at)} · verify against OC/T inputs</span>${toggle}${canEdit ? `<button type="button" class="text-link" data-ai-action="edit">Edit</button><button type="button" class="text-link" data-ai-action="undo">Use AI summary</button>` : ""}`,
+      `<span>Summary of ${count} · edited by ${esc(edited.by || "an admin")} ${time(edited.at)}${stale ? ` · <b class="daily-stale">New OC/T inputs since this edit${canEdit ? "" : "; an admin can update it"}</b>` : " · verify against OC/T inputs"}</span>${toggle}${canEdit ? `<button type="button" class="text-link" data-ai-action="edit">Edit</button>${stale ? '<button type="button" class="text-link" data-ai-action="reviewed" title="Keep this edit for the new inputs">Keep edit</button>' : ""}<button type="button" class="text-link" data-ai-action="undo">Use AI summary</button>` : ""}`,
     );
   // A summary for older inputs is still shown while the new one is written.
   const summary = c?.result ? c : null;
