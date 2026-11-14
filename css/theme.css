@@ -402,7 +402,7 @@ footer {
 .dash-top-side {
   position: relative;
 }
-.dash-top .kpi-card:not(.daily-summary) {
+.dash-top .kpi-card {
   min-height: 0;
   padding: 13px 15px;
 }
@@ -535,10 +535,13 @@ footer {
 .task-grid.compact .trace29-predictor strong {
   font-size: 14px;
 }
-.daily-summary {
+/* The card has a new class name so an older saved copy of this stylesheet,
+   which pinned the card over the page, can't misplace it. */
+.daily-board {
   cursor: default;
   display: flex;
   flex-direction: column;
+  position: static;
   margin-top: 12px;
   min-height: 0;
 }
@@ -578,7 +581,7 @@ footer {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-.daily-summary:hover {
+.daily-board:hover {
   border-color: #323c42;
   background: linear-gradient(155deg, #151b20, #10161a);
 }
