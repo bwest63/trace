@@ -385,11 +385,11 @@ footer {
 .coverage-overview {
   cursor: default;
 }
-/* Dashboard top: coverage cards and METs on the left; the 24-hour summary on
-   the right runs from the top of the coverage cards to the bottom of the METs. */
+/* Dashboard top: coverage cards and METs. The 24-hour summary sits below
+   them, full width, and grows to fit so it never needs its own scrollbar. */
 .dash-top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.5fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .dash-top-main {
@@ -539,8 +539,23 @@ footer {
   cursor: default;
   display: flex;
   flex-direction: column;
-  position: absolute;
-  inset: 0;
+  margin-top: 12px;
+  min-height: 0;
+}
+.daily-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 28px;
+}
+@media (max-width: 850px) {
+  .daily-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .daily-col + .daily-col {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #30383d;
+  }
 }
 @media (max-width: 1250px) {
   .dash-top {
@@ -551,13 +566,6 @@ footer {
   }
   .dash-top .kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .dash-top-side {
-    min-height: 0;
-  }
-  .daily-summary {
-    position: static;
-    max-height: 420px;
   }
 }
 @media (max-width: 850px) {
@@ -583,9 +591,6 @@ footer {
   border-top: 1px solid #30383d;
 }
 .daily-list {
-  overflow-y: auto;
-  min-height: 0;
-  flex: 1 1 auto;
   margin-top: 6px;
 }
 .daily-item {
