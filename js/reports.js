@@ -766,12 +766,13 @@
         onReady?.();
       });
   }
+  const CUSTOM = "__custom";
   const linesOf = (v) => lines(String(v ?? "").replace(/^\s*[-•*]\s*/gm, ""));
 
   function topicsHTML(d) {
     const topics = Array.isArray(d.faarTopics) ? d.faarTopics : [];
     const intro = `<h3 class="trace-rpt-h3">FAAR discussion topics</h3><p class="hint">Three overarching topics for the FAAR discussion, each with a doctrine slide and a discussion slide.${
-      aiReady() ? " Draft them with AI from every OC/T input, then swap a topic, reword a question, or edit the observations before you generate the FAAR. Generate FAAR uses these; with none saved, it drafts them first." : ""
+      aiReady() ? " Draft them with AI from every OC/T input, then edit anything before you generate the FAAR: pick another topic from the list, choose Custom topic to write your own, or change the name, definition, observations, or questions. Generate FAAR uses these; with none saved, it drafts them first." : " Choose Custom topic to write your own, and edit any field."
     }</p>`;
     if (!topics.length)
       return `${intro}<div class="trace-rpt-actions">${aiReady() ? '<button class="secondary" data-ft="draft">Draft topics with AI</button>' : ""}<button class="secondary" data-ft="blank">Start with blank topics</button></div>`;
@@ -786,12 +787,11 @@
       .map((t, i) => {
         const inLib = lib.some((x) => x.id === t.id);
         const options = [
-          ...(inLib ? [] : [`<option value="${h(t.id || "")}" selected>${h(t.name || "Choose a topic")}</option>`]),
           ...lib.map((x) => `<option value="${h(x.id)}" ${x.id === t.id ? "selected" : ""}>${h(x.name)}</option>`),
+          `<option value="${CUSTOM}" ${inLib ? "" : "selected"}>Custom topic (type your own)</option>`,
         ].join("");
-        return `<div class="trace-rpt-teo trace-ft"><div class="trace-rpt-teohead"><strong>Topic ${i + 1}</strong><label class="trace-ft-pick">Topic <select data-ftf="id" data-ti="${i}" ${lib.length ? "" : "disabled"}>${options}</select></label></div>
-<p class="trace-ft-def">${h(t.definition || "No definition yet.")} <small>${h(t.source || "")}</small></p>
-<div class="trace-rpt-fields">${field(i, "why", "Why we're discussing it", t.why, 2)}${field(i, "tasks", "Where OC/Ts saw it (T&EO codes, comma-separated)", (t.tasks || []).join(", "))}${field(i, "product", "Unit product to show on the slide", t.product)}${field(i, "observed", "What we observed (one per line; neutral, past tense)", (t.observed || []).join("\n"), 4)}${field(i, "q0", "Question 1: the unit explains its process", t.questions?.[0] || "")}${field(i, "q1", "Question 2: the unit examines it", t.questions?.[1] || "")}</div></div>`;
+        return `<div class="trace-rpt-teo trace-ft"><div class="trace-rpt-teohead"><strong>Topic ${i + 1}</strong><label class="trace-ft-pick">Start from <select data-ftf="id" data-ti="${i}">${options}</select></label></div>
+<div class="trace-rpt-fields">${field(i, "name", "Topic name", t.name)}${field(i, "source", "Source (publication and title)", t.source)}${field(i, "definition", "Doctrinal definition", t.definition, 3)}${field(i, "why", "Why we're discussing it", t.why, 2)}${field(i, "tasks", "Where OC/Ts saw it (T&EO codes, comma-separated)", (t.tasks || []).join(", "))}${field(i, "product", "Unit product to show on the slide", t.product)}${field(i, "observed", "What we observed (one per line; neutral, past tense)", (t.observed || []).join("\n"), 4)}${field(i, "q0", "Question 1: the unit explains its process", t.questions?.[0] || "")}${field(i, "q1", "Question 2: the unit examines it", t.questions?.[1] || "")}</div></div>`;
       })
       .join("")}<div class="trace-rpt-actions">${aiReady() ? '<button class="secondary" data-ft="draft">Redraft topics with AI</button>' : ""}<button class="secondary" data-ft="clear">Clear topics</button></div>`;
   }
@@ -1147,11 +1147,20 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
         const t = list[+el.dataset.ti];
         if (!t) return;
         const k = el.dataset.ftf;
-        if (k === "id") {
+        if (k === "id" && el.value === CUSTOM) {
+          // Keeps whatever is in the fields, now as the OC/T's own topic.
+          t.id = "custom_" + Date.now().toString(36);
+          if (/^\[Topic \d\]$/.test(t.name || "")) t.name = "";
+        } else if (k === "id") {
           const x = (faarLibrary || []).find((y) => y.id === el.value);
           if (!x) return;
           Object.assign(t, { id: x.id, name: x.name, definition: x.definition, source: x.source });
           if (!t.product) t.product = x.name.toLowerCase();
+        } else if (k === "name" || k === "definition" || k === "source") {
+          t[k] = clean(el.value);
+          // Changed wording makes it the OC/T's own version of the topic.
+          const x = (faarLibrary || []).find((y) => y.id === t.id);
+          if (x && x[k] !== t[k]) t.id = "custom_" + Date.now().toString(36);
         } else if (k === "tasks") t.tasks = el.value.split(",").map(clean).filter(Boolean);
         else if (k === "observed") t.observed = linesOf(el.value);
         else if (k === "q0" || k === "q1") {
@@ -1159,7 +1168,7 @@ ${isAdmin() && aiReady() ? '<details class="trace-rpt-details" id="traceFaarLib"
           t.questions[k === "q0" ? 0 : 1] = clean(el.value);
         } else t[k] = clean(el.value);
         const where = saveTopics(list);
-        if (k === "id") redraw();
+        if (k === "id" || ((k === "name" || k === "definition" || k === "source") && !(faarLibrary || []).some((y) => y.id === t.id))) redraw();
         status(where === "shared" ? "FAAR topics saved." : "FAAR topics saved on this device.");
       });
       if ((getDetails(ev.id, reportUnit).faarTopics || []).length && !faarLibrary) loadFaarLibrary(redraw);
