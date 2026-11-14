@@ -463,11 +463,19 @@ function jumpToStep(taskId, i, unitId, recordId) {
 // "commander-summary"); the OC/T inputs stay one tap away. Local mode, or an
 // AI failure, shows the OC/T inputs with identical entries merged.
 const TRACE_AI_KEY = "trace_ai_commander_summary_v2"; // v2: past-tense observations
-const traceAI = { cache: {}, pending: {}, showInputs: false, editing: null };
+const traceAI = { cache: {}, pending: {}, refresh: {}, showInputs: false, editing: null };
 try {
   traceAI.cache = JSON.parse(localStorage.getItem(TRACE_AI_KEY) || "{}") || {};
   localStorage.removeItem("trace_ai_commander_summary_v1");
 } catch (e) {}
+// When an evaluation was saved: the database's time once it has synced, so a
+// device with a wrong clock can't push inputs in or out of the 24-hour window;
+// the device's own time until then.
+function traceSavedAt(r) {
+  const t = window.TraceSync?.serverSavedAt?.(r.id) || r.savedAt || "";
+  const d = new Date(t);
+  return isNaN(d) ? "" : d.toISOString();
+}
 function traceDailyRecords() {
   const sel =
     trace18.eventScope === "all"
@@ -481,16 +489,16 @@ function traceDailyRecords() {
         (trace18.scope === "all" || r.unitId === trace18.scope) &&
         (!sel ||
           (r.exerciseId === sel.id && (sel.unitIds || []).includes(r.unitId))) &&
-        Date.parse(r.savedAt || "") >= since,
+        Date.parse(traceSavedAt(r)) >= since,
     )
     .forEach((r) => {
       const k = [r.createdBy || r.evaluator, r.unitId, r.taskId].join("|");
       const cur = latest.get(k);
-      if (!cur || (r.savedAt || "") > (cur.savedAt || "")) latest.set(k, r);
+      if (!cur || traceSavedAt(r) > traceSavedAt(cur)) latest.set(k, r);
     });
   return [...latest.values()]
     .filter((r) => (r.observations || "").trim() || (r.coachingFocus || "").trim())
-    .sort((x, y) => (y.savedAt || "").localeCompare(x.savedAt || ""));
+    .sort((x, y) => traceSavedAt(y).localeCompare(traceSavedAt(x)));
 }
 function traceDailyInputsHTML(recs) {
   const multiUnit = trace18.scope === "all";
@@ -539,6 +547,7 @@ function traceAIRequest(scopeKey, sig, recs) {
   const db = window.TraceSync?.db?.();
   if (!db) return;
   traceAI.pending[scopeKey] = sig;
+  setTimeout(() => delete traceAI.refresh[scopeKey]);
   const labels = { tasks: {}, units: {} };
   recs.forEach((r) => {
     const t = tasks.find((x) => x.id === r.taskId);
@@ -559,6 +568,8 @@ function traceAIRequest(scopeKey, sig, recs) {
         unitId: trace18.scope,
         eventId: trace18.eventScope,
         labels,
+        // Refresh asks Claude again instead of returning the shared summary.
+        refresh: Boolean(traceAI.refresh[scopeKey]),
       },
     })
     .then(async ({ data, error }) => {
@@ -614,6 +625,7 @@ document.addEventListener("click", (e) => {
   if (act === "toggle") traceAI.showInputs = !traceAI.showInputs;
   if (act === "refresh") {
     delete traceAI.cache[scopeKey];
+    traceAI.refresh[scopeKey] = true;
     traceAI.showInputs = false;
   }
   if (act === "edit") {

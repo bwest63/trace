@@ -75,6 +75,8 @@ const TraceSync = (function () {
     attach,
     notify,
     files: { put: putFile, get: getFile, remove: removeFile },
+    // When the database received an evaluation; "" until it has been synced.
+    serverSavedAt: (id) => serverSaved[String(id)] || "",
   };
 
   let client = null;
@@ -152,8 +154,12 @@ const TraceSync = (function () {
     v[c.field] = list;
     store(c.key, v);
   }
+  // When the database last received each evaluation (its updated_at), by id.
+  // The dashboard's 24-hour window goes by this, not the saving device's clock.
+  const serverSaved = {};
   function toObject(c, row) {
     const o = { ...row.data };
+    if (c.table === "evaluations" && row.updated_at) serverSaved[String(row.id)] = row.updated_at;
     if (c.owned) o.createdBy = row.created_by;
     return o;
   }
@@ -185,7 +191,7 @@ const TraceSync = (function () {
   async function fetchTable(c) {
     const { data, error } = await client
       .from(c.table)
-      .select("id,data,created_by,created_at")
+      .select("id,data,created_by,created_at,updated_at")
       .order("created_at", { ascending: true });
     if (error) throw error;
     return data || [];
